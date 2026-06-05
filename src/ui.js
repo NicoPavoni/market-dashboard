@@ -89,10 +89,15 @@ function renderAssetList(watchlist, priceData) {
     const selCls  = selectedAssetId === a.id ? ' selected' : '';
     const sig     = d.compositeSignal || d.signal;
 
+    const typeLabel = a.type === 'crypto' ? 'Cripto' : a.type === 'bond' ? 'Bono' : 'Acción';
+    const srcBadge  = d.simulated
+      ? '<span class="price-sim-badge" title="Precio simulado — Yahoo Finance no disponible">sim</span>'
+      : '';
+
     return `<div class="asset-row${selCls}" onclick="selectAsset('${a.id}')">
       <div>
         <div class="asset-name">${a.name}</div>
-        <div class="asset-ticker">${a.ticker} · ${a.type === 'crypto' ? 'Cripto' : 'Acción'}</div>
+        <div class="asset-ticker">${a.ticker} · ${typeLabel} ${srcBadge}</div>
       </div>
       <div class="asset-price">${formatPrice(d.current)}</div>
       <div class="asset-change ${chgCls}">${chgStr}</div>
@@ -681,23 +686,53 @@ function renderAddTradeFormHTML() {
     .filter(a => a.type === 'stock')
     .map(a => `<option value="${a.id}" data-ticker="${a.ticker}">${a.ticker} — ${a.name}</option>`)
     .join('');
+  const bondOpts = assets
+    .filter(a => a.type === 'bond')
+    .map(a => `<option value="${a.id}" data-ticker="${a.ticker}">${a.ticker} — ${a.name}</option>`)
+    .join('');
 
   const today = new Date().toISOString().split('T')[0];
 
   return `<div class="add-trade-card">
+
+    <!-- Mode tabs -->
+    <div class="trade-mode-tabs">
+      <button class="trade-mode-btn active" data-mode="ars" onclick="setTradeMode('ars')">
+        <i class="ti ti-currency-peso" aria-hidden="true"></i> En pesos ARS
+      </button>
+      <button class="trade-mode-btn" data-mode="usd" onclick="setTradeMode('usd')">
+        <i class="ti ti-currency-dollar" aria-hidden="true"></i> En dólares USD
+        <span class="trade-mode-hint">para registrar posiciones existentes</span>
+      </button>
+    </div>
+
+    <!-- Common fields (always visible) -->
     <div class="trade-form-grid">
       <div class="form-group">
         <label class="config-label">Activo</label>
         <select id="trade-asset" onchange="updateTradePriceField()">
           <option value="">Seleccionar activo...</option>
           <optgroup label="Criptomonedas">${cryptoOpts}</optgroup>
-          <optgroup label="Acciones">${stockOpts}</optgroup>
+          <optgroup label="Acciones / CEDEARs">${stockOpts}</optgroup>
+          <optgroup label="Bonos / Obligaciones Negociables">${bondOpts}</optgroup>
         </select>
       </div>
       <div class="form-group">
         <label class="config-label">Fecha de compra</label>
         <input type="date" class="add-input" id="trade-date" value="${today}" />
       </div>
+      <div class="form-group">
+        <label class="config-label">
+          Cantidad (unidades)
+          <span class="form-hint" id="trade-qty-hint">opcional en modo ARS</span>
+        </label>
+        <input type="number" class="add-input" id="trade-qty"
+          placeholder="0.01650022" min="0" step="any" oninput="updateTradeFromQty()" />
+      </div>
+    </div>
+
+    <!-- ARS mode fields -->
+    <div class="trade-form-grid" id="trade-ars-fields">
       <div class="form-group">
         <label class="config-label">Monto en pesos ARS $</label>
         <input type="number" class="add-input" id="trade-ars"
@@ -719,6 +754,28 @@ function renderAddTradeFormHTML() {
         <input type="number" class="add-input" id="trade-price"
           placeholder="62400" min="0" step="any" oninput="updateTradeCalc()" />
       </div>
+    </div>
+
+    <!-- USD direct mode fields -->
+    <div class="trade-form-grid hidden" id="trade-usd-fields">
+      <div class="form-group">
+        <label class="config-label">
+          Total invertido (USD)
+          <span class="form-hint">costo base de tu posición</span>
+        </label>
+        <input type="number" class="add-input" id="trade-usd-amount"
+          placeholder="1036.65" min="0" step="any" oninput="updateTradeCalcUsd()" />
+      </div>
+      <div class="form-group">
+        <label class="config-label">Resultado calculado</label>
+        <div class="trade-calc" id="trade-calc-usd">
+          <span class="calc-muted">Completá los campos para calcular</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shared result display (ARS mode) -->
+    <div class="trade-form-grid" id="trade-result-ars">
       <div class="form-group">
         <label class="config-label">Resultado calculado</label>
         <div class="trade-calc" id="trade-calc">
@@ -726,6 +783,7 @@ function renderAddTradeFormHTML() {
         </div>
       </div>
     </div>
+
     <div id="trade-msg" class="add-msg"></div>
     <button class="btn-primary" onclick="submitTrade()">
       <i class="ti ti-plus" aria-hidden="true"></i> Registrar compra
@@ -809,34 +867,75 @@ function renderPositionCard(pos) {
   </div>`;
 }
 
+const TYPE_META = {
+  crypto: { label: 'Criptomonedas', icon: 'ti-currency-bitcoin' },
+  stock:  { label: 'Acciones',      icon: 'ti-chart-candle'     },
+  bond:   { label: 'Bonos / ONs',   icon: 'ti-file-certificate' },
+};
+
+function renderPortfolioOverview(pf) {
+  const pnlSign = pf.totalPnlUsd >= 0 ? '+' : '';
+  const pnlCls  = pf.totalPnlUsd >= 0 ? 'green' : 'red';
+  const pnlAccent = pf.totalPnlUsd >= 0 ? 'metric-buy' : 'metric-sell';
+
+  // Per-type breakdown rows (only show types that have positions)
+  const typeOrder = ['crypto', 'stock', 'bond'];
+  const breakdownRows = typeOrder
+    .filter(t => pf.byType[t])
+    .map(t => {
+      const d       = pf.byType[t];
+      const pnl     = d.value - d.invested;
+      const pnlPct  = d.invested > 0 ? (pnl / d.invested) * 100 : 0;
+      const sign    = pnl >= 0 ? '+' : '';
+      const cls     = pnl >= 0 ? 'green' : 'red';
+      const meta    = TYPE_META[t] || { label: t, icon: 'ti-circle' };
+      return `
+        <div class="pf-type-row">
+          <span class="pf-type-icon"><i class="ti ${meta.icon}" aria-hidden="true"></i></span>
+          <span class="pf-type-name">${meta.label}</span>
+          <span class="pf-type-invested">${formatUsd(d.invested)}</span>
+          <span class="pf-type-arrow"><i class="ti ti-arrow-right" aria-hidden="true"></i></span>
+          <span class="pf-type-value">${formatUsd(d.value)}</span>
+          <span class="pf-type-pnl ${cls}">${sign}${formatUsd(pnl)} (${sign}${pnlPct.toFixed(1)}%)</span>
+        </div>`;
+    }).join('');
+
+  return `
+    <div class="pf-overview">
+      <div class="pf-overview-title">
+        <i class="ti ti-wallet" aria-hidden="true"></i> Resumen de inversiones
+      </div>
+      <div class="portfolio-summary pf-totals">
+        <div class="metric">
+          <div class="metric-label">Total invertido</div>
+          <div class="metric-val">${formatUsd(pf.totalUsdInvested)}</div>
+          <div class="metric-sub muted">USD acumulados</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Valor actual</div>
+          <div class="metric-val">${formatUsd(pf.totalCurrentValue)}</div>
+          <div class="metric-sub muted">al precio de hoy</div>
+        </div>
+        <div class="metric ${pnlAccent}">
+          <div class="metric-label">Resultado neto</div>
+          <div class="metric-val ${pnlCls}">${pnlSign}${formatUsd(pf.totalPnlUsd)}</div>
+          <div class="metric-sub ${pnlCls}">${pnlSign}${pf.totalPnlPct.toFixed(2)}%</div>
+        </div>
+      </div>
+      ${breakdownRows ? `
+        <div class="pf-divider"></div>
+        <div class="pf-breakdown-title">Por categoría</div>
+        <div class="pf-breakdown">${breakdownRows}</div>` : ''}
+    </div>`;
+}
+
 function renderPortfolio(priceData) {
   const container = document.getElementById('portfolio-content');
   if (!container) return;
 
   const pf = computePortfolio(priceData);
 
-  const totalPnlSign = pf.totalPnlUsd >= 0 ? '+' : '';
-  const totalPnlCls  = pf.totalPnlUsd >= 0 ? 'green' : 'red';
-
-  const summaryHTML = pf.trades.length
-    ? `<div class="portfolio-summary">
-        <div class="metric">
-          <div class="metric-label">Total invertido</div>
-          <div class="metric-val small">${formatUsd(pf.totalUsdInvested)}</div>
-          <div class="metric-sub muted">USD acumulados</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Valor actual</div>
-          <div class="metric-val small">${formatUsd(pf.totalCurrentValue)}</div>
-          <div class="metric-sub muted">al precio de hoy</div>
-        </div>
-        <div class="metric ${pf.totalPnlUsd >= 0 ? 'metric-buy' : 'metric-sell'}">
-          <div class="metric-label">Ganancia / Pérdida</div>
-          <div class="metric-val small ${totalPnlCls}">${totalPnlSign}${formatUsd(pf.totalPnlUsd)}</div>
-          <div class="metric-sub ${totalPnlCls}">${totalPnlSign}${pf.totalPnlPct.toFixed(2)}%</div>
-        </div>
-      </div>`
-    : '';
+  const summaryHTML = renderPortfolioOverview(pf);
 
   const positionsHTML = pf.positions.length
     ? `<div class="section-title" style="margin-top:1.5rem">Mis posiciones</div>

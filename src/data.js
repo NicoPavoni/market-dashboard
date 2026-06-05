@@ -4,8 +4,12 @@
  * To add a new crypto: add an entry to KNOWN_ASSETS with type: 'crypto'
  *   and set `id` to the CoinGecko coin id (e.g. 'bitcoin', 'solana').
  *
- * To add a stock: add an entry with type: 'stock'. Prices will be
- *   simulated (real stock APIs require a paid key — see README for options).
+ * To add a stock: add an entry with type: 'stock'. Real prices are fetched
+ *   from Yahoo Finance using `asset.ticker` (e.g. 'AAPL', 'SPY').
+ *   Falls back to simulated prices if the API is unavailable.
+ *
+ * To add a bond trading on BYMA: add type: 'bond' and set
+ *   `yahooTicker` to the ticker with the .BA suffix (e.g. 'YM34O.BA').
  */
 
 // Default watchlist loaded on first visit
@@ -88,6 +92,15 @@ const KNOWN_ASSETS = {
   'despegar':   { id: 'despegar',         ticker: 'DESP', name: 'Despegar',       type: 'stock' },
   'loma':       { id: 'loma-negra',       ticker: 'LOMA', name: 'Loma Negra',     type: 'stock' },
   'pamp':       { id: 'pampa-energia',    ticker: 'PAM',  name: 'Pampa Energía',  type: 'stock' },
+
+  // ── Obligaciones Negociables (Bonos BYMA) ────────────────────────────
+  // yahooTicker uses the .BA suffix for Buenos Aires exchange
+  'ym34o':      { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', yahooTicker: 'YM34O.BA'  },
+  'ypf-on':     { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', yahooTicker: 'YM34O.BA'  },
+  'ymcho':      { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', yahooTicker: 'YM34O.BA'  },
+  'tlcto':      { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', yahooTicker: 'TLCTO.BA'  },
+  'telecom-on': { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', yahooTicker: 'TLCTO.BA'  },
+  'tlcmo':      { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', yahooTicker: 'TLCTO.BA'  },
 };
 
 // Simulated base prices for stocks (used when real API not available)
@@ -115,4 +128,6 @@ const STOCK_BASE_PRICES = {
   'despegar':           11,
   'loma-negra':         10,
   'pampa-energia':      55,
+  'ym34o':             100,
+  'tlcto':             100,
 };

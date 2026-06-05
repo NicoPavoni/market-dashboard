@@ -92,6 +92,15 @@ function computePortfolio(priceData) {
     ? (totalPnlUsd / totalUsdInvested) * 100
     : 0;
 
+  // Aggregate totals per asset type (crypto / stock / bond)
+  const byType = {};
+  Object.values(positions).forEach(pos => {
+    const t = pos.assetType || 'other';
+    if (!byType[t]) byType[t] = { invested: 0, value: 0 };
+    byType[t].invested += pos.totalUsdInvested;
+    byType[t].value    += pos.currentValue;
+  });
+
   return {
     trades,
     positions: Object.values(positions).sort((a, b) => b.totalUsdInvested - a.totalUsdInvested),
@@ -99,14 +108,18 @@ function computePortfolio(priceData) {
     totalCurrentValue,
     totalPnlUsd,
     totalPnlPct,
+    byType,
   };
 }
 
 function getUniqueAssetOptions() {
+  const typeOrder = { crypto: 0, stock: 1, bond: 2 };
   return Object.values(KNOWN_ASSETS)
     .filter((a, i, arr) => arr.findIndex(x => x.id === a.id) === i)
     .sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'crypto' ? -1 : 1;
+      const ta = typeOrder[a.type] ?? 3;
+      const tb = typeOrder[b.type] ?? 3;
+      if (ta !== tb) return ta - tb;
       return a.name.localeCompare(b.name);
     });
 }

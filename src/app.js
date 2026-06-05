@@ -146,7 +146,7 @@ async function addAsset() {
 
   watchlist.push({ ...asset });
   await loadSingleAsset(asset);
-  fundamentalData[asset.id] = asset.type === 'stock'
+  fundamentalData[asset.id] = (asset.type === 'stock' || asset.type === 'bond')
     ? getStockFundamentals(asset.id)
     : (await fetchAllCryptoFundamentals([asset.id]))[asset.id] ?? null;
   computeCompositeScores();
@@ -175,12 +175,47 @@ function removeAsset(index) {
 
 // ─── Portfolio handlers ────────────────────────────────────────────────
 
+// ─── Trade mode (ARS / USD direct) ──────────────────────────────────
+
+function setTradeMode(mode) {
+  document.querySelectorAll('.trade-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  const isUsd = mode === 'usd';
+  document.getElementById('trade-ars-fields')?.classList.toggle('hidden', isUsd);
+  document.getElementById('trade-result-ars')?.classList.toggle('hidden', isUsd);
+  document.getElementById('trade-usd-fields')?.classList.toggle('hidden', !isUsd);
+
+  const hint = document.getElementById('trade-qty-hint');
+  if (hint) hint.textContent = isUsd ? 'recomendado — ayuda a calcular el precio unitario' : 'opcional en modo ARS';
+}
+
+function getTradeMode() {
+  return document.querySelector('.trade-mode-btn.active')?.dataset.mode || 'ars';
+}
+
 function updateTradePriceField() {
   const assetId = document.getElementById('trade-asset')?.value;
   if (!assetId) return;
   const d = priceData[assetId];
   if (d?.current) {
-    document.getElementById('trade-price').value = d.current.toFixed(2);
+    const priceEl = document.getElementById('trade-price');
+    if (priceEl) priceEl.value = d.current.toFixed(2);
+  }
+  updateTradeCalc();
+  updateTradeCalcUsd();
+}
+
+// Called when the user types in the "Cantidad" field.
+// If price + rate are set, back-calculates the ARS amount.
+function updateTradeFromQty() {
+  const qty   = parseFloat(document.getElementById('trade-qty')?.value)   || 0;
+  const price = parseFloat(document.getElementById('trade-price')?.value) || 0;
+  const rate  = parseFloat(document.getElementById('trade-rate')?.value)  || 0;
+
+  if (qty > 0 && price > 0 && rate > 0) {
+    const arsCalc = qty * price * rate;
+    document.getElementById('trade-ars').value = arsCalc.toFixed(2);
   }
   updateTradeCalc();
 }
@@ -203,6 +238,12 @@ function updateTradeCalc() {
   const usdInvested = ars / rate;
   const quantity    = usdInvested / price;
 
+  // Keep the qty field in sync when editing from ARS side
+  const qtyEl = document.getElementById('trade-qty');
+  if (qtyEl && document.activeElement !== qtyEl) {
+    qtyEl.value = quantity.toFixed(6);
+  }
+
   calcEl.innerHTML = `
     <span class="calc-item">
       <strong>USD invertidos:</strong> ${formatUsd(usdInvested)}
@@ -214,21 +255,55 @@ function updateTradeCalc() {
   `;
 }
 
-async function submitTrade() {
-  const msgEl    = document.getElementById('trade-msg');
-  const assetId  = document.getElementById('trade-asset')?.value;
-  const dateVal  = document.getElementById('trade-date')?.value;
-  const arsVal   = parseFloat(document.getElementById('trade-ars')?.value);
-  const rateVal  = parseFloat(document.getElementById('trade-rate')?.value);
-  const priceVal = parseFloat(document.getElementById('trade-price')?.value);
+// Recalculates the display for USD-direct mode
+function updateTradeCalcUsd() {
+  const calcEl  = document.getElementById('trade-calc-usd');
+  if (!calcEl) return;
 
-  if (!assetId || !dateVal || !arsVal || !rateVal || !priceVal) {
-    msgEl.textContent = '⚠ Completá todos los campos.';
-    msgEl.style.color = '#E24B4A';
+  const usd     = parseFloat(document.getElementById('trade-usd-amount')?.value) || 0;
+  const qty     = parseFloat(document.getElementById('trade-qty')?.value)         || 0;
+  const assetId = document.getElementById('trade-asset')?.value;
+
+  if (!usd || !assetId) {
+    calcEl.innerHTML = '<span class="calc-muted">Completá monto USD y activo</span>';
     return;
   }
-  if ([arsVal, rateVal, priceVal].some(v => isNaN(v) || v <= 0)) {
-    msgEl.textContent = '⚠ Los valores deben ser positivos.';
+
+  const asset     = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  const ticker    = asset?.ticker ?? '?';
+  const priceUnit = qty > 0 ? usd / qty : (priceData[assetId]?.current || 0);
+  const qtyCalc   = qty > 0 ? qty : (priceUnit > 0 ? usd / priceUnit : 0);
+
+  // sync qty field
+  const qtyEl = document.getElementById('trade-qty');
+  if (qtyEl && document.activeElement !== qtyEl && qty <= 0 && qtyCalc > 0) {
+    qtyEl.value = qtyCalc.toFixed(6);
+  }
+
+  const priceLabel = priceUnit > 0
+    ? ` · precio unitario: ${formatUsd(priceUnit)}`
+    : '';
+
+  calcEl.innerHTML = `
+    <span class="calc-item">
+      <strong>USD invertidos:</strong> ${formatUsd(usd)}
+    </span>
+    <span class="calc-sep">·</span>
+    <span class="calc-item">
+      <strong>${ticker} registrados:</strong> ${qtyCalc.toFixed(6)}${priceLabel}
+    </span>
+  `;
+}
+
+async function submitTrade() {
+  const msgEl   = document.getElementById('trade-msg');
+  const mode    = getTradeMode();
+  const assetId = document.getElementById('trade-asset')?.value;
+  const dateVal = document.getElementById('trade-date')?.value;
+  const qtyVal  = parseFloat(document.getElementById('trade-qty')?.value);
+
+  if (!assetId || !dateVal) {
+    msgEl.textContent = '⚠ Seleccioná un activo y una fecha.';
     msgEl.style.color = '#E24B4A';
     return;
   }
@@ -240,8 +315,63 @@ async function submitTrade() {
     return;
   }
 
-  const usdInvested = arsVal / rateVal;
-  const quantity    = usdInvested / priceVal;
+  let usdInvested, quantity, priceUsd, arsAmount, arsUsdRate;
+
+  if (mode === 'usd') {
+    // ── USD direct mode ──────────────────────────────────────────
+    const usdAmountVal = parseFloat(document.getElementById('trade-usd-amount')?.value);
+    if (!usdAmountVal || usdAmountVal <= 0) {
+      msgEl.textContent = '⚠ Ingresá el monto total en USD.';
+      msgEl.style.color = '#E24B4A';
+      return;
+    }
+    usdInvested = usdAmountVal;
+    if (qtyVal > 0) {
+      // Use the exact quantity provided; infer price from it
+      quantity  = qtyVal;
+      priceUsd  = usdInvested / quantity;
+    } else {
+      // No quantity given — use current market price to infer it
+      const currentPrice = priceData[assetId]?.current;
+      if (!currentPrice) {
+        msgEl.textContent = '⚠ Ingresá la cantidad (no hay precio disponible para calcularlo).';
+        msgEl.style.color = '#E24B4A';
+        return;
+      }
+      priceUsd  = currentPrice;
+      quantity  = usdInvested / priceUsd;
+    }
+    arsAmount  = 0;
+    arsUsdRate = 1;
+
+  } else {
+    // ── ARS mode (existing) ──────────────────────────────────────
+    let arsVal   = parseFloat(document.getElementById('trade-ars')?.value);
+    const rateVal  = parseFloat(document.getElementById('trade-rate')?.value);
+    const priceVal = parseFloat(document.getElementById('trade-price')?.value);
+
+    // Back-fill ARS from qty * price * rate if ARS was left blank
+    if ((!arsVal || isNaN(arsVal)) && qtyVal > 0 && priceVal > 0 && rateVal > 0) {
+      arsVal = qtyVal * priceVal * rateVal;
+    }
+
+    if (!rateVal || !priceVal || !arsVal) {
+      msgEl.textContent = '⚠ Completá monto ARS, tipo de cambio y precio.';
+      msgEl.style.color = '#E24B4A';
+      return;
+    }
+    if ([arsVal, rateVal, priceVal].some(v => isNaN(v) || v <= 0)) {
+      msgEl.textContent = '⚠ Los valores deben ser positivos.';
+      msgEl.style.color = '#E24B4A';
+      return;
+    }
+
+    arsAmount   = arsVal;
+    arsUsdRate  = rateVal;
+    priceUsd    = priceVal;
+    usdInvested = arsVal / rateVal;
+    quantity    = usdInvested / priceVal;
+  }
 
   addTrade({
     assetId:    asset.id,
@@ -249,17 +379,17 @@ async function submitTrade() {
     assetName:  asset.name,
     assetType:  asset.type,
     date:       dateVal,
-    arsAmount:  arsVal,
-    arsUsdRate: rateVal,
+    arsAmount,
+    arsUsdRate,
     usdInvested,
-    priceUsd:   priceVal,
+    priceUsd,
     quantity,
   });
 
   if (!watchlist.find(w => w.id === asset.id)) {
     watchlist.push({ ...asset });
     await loadSingleAsset(asset);
-    const fData = asset.type === 'stock'
+    const fData = (asset.type === 'stock' || asset.type === 'bond')
       ? getStockFundamentals(asset.id)
       : (await fetchAllCryptoFundamentals([asset.id]))[asset.id] ?? null;
     if (fData) fundamentalData[asset.id] = fData;
@@ -281,7 +411,7 @@ async function addAssetToWatchlistFromPortfolio(assetId) {
   if (!asset || watchlist.find(w => w.id === assetId)) return;
   watchlist.push({ ...asset });
   await loadSingleAsset(asset);
-  const fData = asset.type === 'stock'
+  const fData = (asset.type === 'stock' || asset.type === 'bond')
     ? getStockFundamentals(asset.id)
     : (await fetchAllCryptoFundamentals([asset.id]))[asset.id] ?? null;
   if (fData) fundamentalData[asset.id] = fData;

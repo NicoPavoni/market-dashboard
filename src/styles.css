@@ -237,9 +237,23 @@ body {
 }
 
 .asset-name   { font-weight: 500; font-size: 14px; }
-.asset-ticker { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+.asset-ticker { font-size: 12px; color: var(--text-secondary); margin-top: 1px; display: flex; align-items: center; gap: 5px; }
 .asset-price  { font-size: 15px; font-weight: 600; text-align: right; letter-spacing: -0.3px; }
 .asset-change { font-size: 13px; text-align: right; }
+
+.price-sim-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--amber);
+  color: #fff;
+  opacity: 0.8;
+  cursor: help;
+}
 
 /* ── Signal badges ── */
 .signal-badge {
@@ -669,6 +683,65 @@ select {
 }
 .metric-sell { border-top: 2.5px solid var(--red); }
 
+/* ── Portfolio overview (resumen total + desglose por categoría) ── */
+.pf-overview {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.pf-overview-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pf-totals { margin-bottom: 0; }
+.pf-totals .metric-val { font-size: 20px; }
+
+.pf-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0 12px;
+}
+.pf-breakdown-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.pf-breakdown { display: flex; flex-direction: column; gap: 6px; }
+
+.pf-type-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.pf-type-icon  { color: var(--text-secondary); font-size: 14px; flex-shrink: 0; }
+.pf-type-name  { font-weight: 600; min-width: 130px; font-size: 13px; }
+.pf-type-invested { color: var(--text-secondary); flex: 1; }
+.pf-type-arrow { color: var(--text-secondary); font-size: 12px; flex-shrink: 0; }
+.pf-type-value { flex: 1; font-weight: 500; }
+.pf-type-pnl   { font-weight: 600; text-align: right; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .pf-type-row { flex-wrap: wrap; }
+  .pf-type-invested, .pf-type-arrow, .pf-type-value { display: none; }
+  .pf-type-name  { flex: 1; }
+}
+
 .positions-list { display: flex; flex-direction: column; gap: 12px; }
 
 .position-card {
@@ -760,6 +833,47 @@ select {
 .trade-date      { font-weight: 600; color: var(--text); }
 .trade-detail    { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trade-usd       { font-weight: 600; white-space: nowrap; }
+
+/* ── Trade mode tabs (ARS / USD direct) ── */
+.trade-mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+.trade-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+  flex-wrap: wrap;
+}
+.trade-mode-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.trade-mode-btn.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+.trade-mode-hint {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.7;
+  width: 100%;
+  margin-top: 1px;
+}
+.trade-mode-btn.active .trade-mode-hint { opacity: 0.65; }
+
+.hidden { display: none !important; }
 
 /* ── Add trade form ── */
 .add-trade-card {

@@ -95,9 +95,48 @@ async function fetchCryptoPrices(coinId) {
     return {
       prices:     data.prices.map(p => p[1]),
       timestamps: data.prices.map(p => p[0]),
+      simulated:  false,
     };
   } catch (err) {
     console.warn(`CoinGecko fetch failed for ${coinId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch real price history from Yahoo Finance (free, no API key).
+ * Works for US stocks/ETFs (AAPL, SPY…) and BYMA bonds (YM34O.BA).
+ * Returns { prices, timestamps, simulated: false } or null on failure.
+ */
+async function fetchYahooPrices(ticker, days = 90) {
+  const period2 = Math.floor(Date.now() / 1000);
+  const period1 = period2 - days * 86400;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=1d&events=history`;
+
+  try {
+    const res = await fetch(url, { cache: 'default' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const result = data?.chart?.result?.[0];
+    if (!result) throw new Error('No result');
+
+    const rawTs     = result.timestamp               || [];
+    const rawClose  = result.indicators?.quote?.[0]?.close || [];
+
+    const valid = rawTs
+      .map((t, i) => ({ t: t * 1000, p: rawClose[i] }))
+      .filter(x => x.p != null && isFinite(x.p) && x.p > 0);
+
+    if (valid.length < 5) throw new Error('Datos insuficientes');
+
+    return {
+      prices:     valid.map(x => x.p),
+      timestamps: valid.map(x => x.t),
+      simulated:  false,
+    };
+  } catch (err) {
+    console.warn(`Yahoo Finance fetch failed for ${ticker}:`, err.message);
     return null;
   }
 }
@@ -149,7 +188,8 @@ function getCompositeScore(rsi, ma20, ma50, change24h, rsiThreshold, fundamental
 }
 
 /**
- * Load price data for a single asset (crypto = real, stock = simulated).
+ * Load price data for a single asset.
+ * Crypto → CoinGecko (real). Stock/Bond → Yahoo Finance (real, fallback sim).
  * Returns enriched object ready for rendering.
  */
 async function loadAssetData(asset, rsiThreshold = 35) {
@@ -157,9 +197,14 @@ async function loadAssetData(asset, rsiThreshold = 35) {
 
   if (asset.type === 'crypto') {
     raw = await fetchCryptoPrices(asset.id);
+  } else if (asset.type === 'stock' || asset.type === 'bond') {
+    // yahooTicker overrides the default ticker (used for .BA suffix on BYMA bonds)
+    const yTicker = asset.yahooTicker || asset.ticker;
+    raw = await fetchYahooPrices(yTicker);
   }
 
   if (!raw) {
+    // Fallback: generate simulated history (marks simulated: true)
     raw = simulateStockPrices(asset.id);
   }
 

@@ -22,6 +22,8 @@ const STOCK_FUNDAMENTALS = {
   'despegar':          { sector: 'Turismo/LatAm',    mcapTier: 'Small Cap', stabilityScore: 44 },
   'loma-negra':        { sector: 'Construcción/ARG', mcapTier: 'Small Cap', stabilityScore: 40 },
   'pampa-energia':     { sector: 'Energía/Argentina',mcapTier: 'Mid Cap',   stabilityScore: 42 },
+  'ym34o':             { sector: 'ON / Energía ARG', mcapTier: 'Bono',      stabilityScore: 55 },
+  'tlcto':             { sector: 'ON / Telecom ARG', mcapTier: 'Bono',      stabilityScore: 60 },
 };
 
 async function fetchAllCryptoFundamentals(coinIds) {
