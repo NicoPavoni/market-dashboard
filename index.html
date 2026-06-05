@@ -9,170 +9,246 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 <body>
-  <div class="dash">
+  <div class="app-shell">
 
-    <!-- HEADER -->
-    <div class="header">
-      <div>
-        <div class="title">Mi Panel de Mercados</div>
-        <div class="subtitle">Análisis técnico · Señales de compra · Alertas en tiempo real</div>
-      </div>
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab('watchlist')">Watchlist</button>
-        <button class="tab" onclick="switchTab('alertas')">Alertas</button>
-        <button class="tab" onclick="switchTab('config')">Configurar</button>
-      </div>
-    </div>
-
-    <!-- STATUS BAR -->
-    <div class="status-bar">
-      <div class="dot"></div>
-      <span id="status-txt">Actualizando precios...</span>
-    </div>
-
-    <!-- TAB: WATCHLIST -->
-    <div id="tab-watchlist">
-      <div class="grid-4" id="summary-cards">
-        <div class="metric">
-          <div class="metric-label">Señales compra</div>
-          <div class="metric-val" id="cnt-buy">—</div>
-          <div class="metric-sub green">activas ahora</div>
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">
+          <i class="ti ti-chart-candlestick" aria-hidden="true"></i>
         </div>
-        <div class="metric">
-          <div class="metric-label">En espera</div>
-          <div class="metric-val" id="cnt-wait">—</div>
-          <div class="metric-sub amber">casi listas</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Activos seguidos</div>
-          <div class="metric-val" id="cnt-total">—</div>
-          <div class="metric-sub muted">en watchlist</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Última actualización</div>
-          <div class="metric-val small" id="last-upd">—</div>
-          <div class="metric-sub muted">hora local</div>
+        <div>
+          <div class="brand-title">Market Panel</div>
+          <div class="brand-sub">Análisis inteligente</div>
         </div>
       </div>
 
-      <div class="section-title">Activos en seguimiento</div>
-      <div class="list-header">
-        <span class="lh">Nombre</span>
-        <span class="lh right">Precio</span>
-        <span class="lh right">24h</span>
-        <span class="lh right">RSI</span>
-        <span class="lh right">Señal</span>
-      </div>
-      <div class="asset-list" id="asset-list"></div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <button class="nav-item active" onclick="switchTab('watchlist')">
+          <i class="ti ti-chart-bar" aria-hidden="true"></i>
+          <span>Watchlist</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('alertas')">
+          <i class="ti ti-bell-ringing" aria-hidden="true"></i>
+          <span>Alertas</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('macro')">
+          <i class="ti ti-world" aria-hidden="true"></i>
+          <span>Macro</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('riesgo')">
+          <i class="ti ti-shield-check" aria-hidden="true"></i>
+          <span>Riesgo</span>
+        </button>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="switchTab('ayuda')">
+          <i class="ti ti-book-2" aria-hidden="true"></i>
+          <span>Guía</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('config')">
+          <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+          <span>Configurar</span>
+        </button>
+      </nav>
 
-      <!-- CHART AREA -->
-      <div class="chart-area" id="chart-area" style="display:none;">
-        <div class="chart-header">
-          <div>
-            <div class="chart-name" id="chart-name">—</div>
-            <div class="chart-price" id="chart-price">—</div>
+      <div class="sidebar-footer">
+        <div class="sidebar-status">
+          <div class="dot"></div>
+          <span id="status-txt">Actualizando...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── MAIN CONTENT ── -->
+    <main class="main-content">
+
+      <!-- TAB: WATCHLIST -->
+      <div id="tab-watchlist">
+        <div class="page-header">
+          <div class="page-title">Watchlist</div>
+          <div class="page-subtitle">Seguimiento en tiempo real de tus activos</div>
+        </div>
+
+        <div class="grid-4" id="summary-cards">
+          <div class="metric metric-buy">
+            <div class="metric-label">Señales compra</div>
+            <div class="metric-val" id="cnt-buy">—</div>
+            <div class="metric-sub green">activas ahora</div>
           </div>
-          <div class="tf-btns">
-            <button class="tf-btn active" onclick="setTF('7d', this)">7D</button>
-            <button class="tf-btn" onclick="setTF('30d', this)">30D</button>
-            <button class="tf-btn" onclick="setTF('90d', this)">90D</button>
+          <div class="metric metric-wait">
+            <div class="metric-label">En espera</div>
+            <div class="metric-val" id="cnt-wait">—</div>
+            <div class="metric-sub amber">casi listas</div>
           </div>
-        </div>
-        <div style="position:relative; width:100%; height:200px;">
-          <canvas id="priceChart" role="img" aria-label="Gráfico de precio histórico del activo seleccionado"></canvas>
-        </div>
-        <div class="indicators" id="indicators-row"></div>
-      </div>
-    </div>
-
-    <!-- TAB: ALERTAS -->
-    <div id="tab-alertas" style="display:none;">
-      <div class="section-title">Alertas de compra detectadas</div>
-      <div class="alerts-list" id="alerts-list">
-        <div class="empty-state">Cargando alertas...</div>
-      </div>
-
-      <div style="margin-top:1.5rem;">
-        <div class="section-title">Cómo funcionan las señales</div>
-        <div class="alerts-list">
-          <div class="alert-item">
-            <div class="alert-icon alert-buy-icon">
-              <i class="ti ti-trending-down" aria-hidden="true"></i>
-            </div>
-            <div class="alert-content">
-              <div class="alert-title">RSI sobrevendido (&lt; 30)</div>
-              <div class="alert-desc">El activo cayó excesivamente. Históricamente genera rebotes. Señal de compra fuerte.</div>
-            </div>
+          <div class="metric">
+            <div class="metric-label">Activos seguidos</div>
+            <div class="metric-val" id="cnt-total">—</div>
+            <div class="metric-sub muted">en watchlist</div>
           </div>
-          <div class="alert-item">
-            <div class="alert-icon alert-buy-icon">
-              <i class="ti ti-chart-line" aria-hidden="true"></i>
-            </div>
-            <div class="alert-content">
-              <div class="alert-title">Cruce de medias móviles (Golden Cross)</div>
-              <div class="alert-desc">La MA20 cruza por encima de la MA50 — señal de cambio de tendencia alcista.</div>
-            </div>
-          </div>
-          <div class="alert-item">
-            <div class="alert-icon alert-warn-icon">
-              <i class="ti ti-minus" aria-hidden="true"></i>
-            </div>
-            <div class="alert-content">
-              <div class="alert-title">RSI zona neutra (30–50)</div>
-              <div class="alert-desc">Precio en consolidación. Monitorear ruptura de soporte/resistencia antes de entrar.</div>
-            </div>
+          <div class="metric">
+            <div class="metric-label">Última actualización</div>
+            <div class="metric-val small" id="last-upd">—</div>
+            <div class="metric-sub muted">hora local</div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- TAB: CONFIG -->
-    <div id="tab-config" style="display:none;">
-      <div class="section-title">Agregar activo a watchlist</div>
-      <div class="add-bar">
-        <input class="add-input" id="new-ticker" placeholder="Ej: bitcoin, ethereum, AAPL, BTC..." />
-        <button class="btn-primary" onclick="addAsset()">+ Agregar</button>
-      </div>
-      <div id="add-msg" class="add-msg"></div>
+        <div class="section-title">Activos en seguimiento</div>
+        <div class="list-header">
+          <span class="lh">Nombre</span>
+          <span class="lh right">Precio</span>
+          <span class="lh right">24h</span>
+          <span class="lh right">RSI</span>
+          <span class="lh right">Señal</span>
+        </div>
+        <div class="asset-list" id="asset-list"></div>
 
-      <div class="section-title">Gestionar watchlist</div>
-      <div id="config-list"></div>
-
-      <div style="margin-top:1.5rem;">
-        <div class="section-title">Parámetros de análisis</div>
-        <div class="config-box">
-          <div class="config-grid">
+        <!-- CHART AREA -->
+        <div class="chart-area" id="chart-area" style="display:none;">
+          <div class="chart-header">
             <div>
-              <div class="config-label">RSI señal compra (≤)</div>
-              <div class="slider-row">
-                <input type="range" min="20" max="45" value="35" step="1" id="rsi-thresh"
-                  oninput="document.getElementById('rsi-val').textContent = this.value" />
-                <span id="rsi-val">35</span>
+              <div class="chart-name" id="chart-name">—</div>
+              <div class="chart-price" id="chart-price">—</div>
+            </div>
+            <div class="tf-btns">
+              <button class="tf-btn active" onclick="setTF('7d', this)">7D</button>
+              <button class="tf-btn" onclick="setTF('30d', this)">30D</button>
+              <button class="tf-btn" onclick="setTF('90d', this)">90D</button>
+            </div>
+          </div>
+          <div style="position:relative; width:100%; height:200px;">
+            <canvas id="priceChart" role="img" aria-label="Gráfico de precio histórico"></canvas>
+          </div>
+          <div class="indicators" id="indicators-row"></div>
+        </div>
+      </div>
+
+      <!-- TAB: ALERTAS -->
+      <div id="tab-alertas" style="display:none;">
+        <div class="page-header">
+          <div class="page-title">Alertas</div>
+          <div class="page-subtitle">Señales generadas por el análisis compuesto</div>
+        </div>
+
+        <div class="section-title">Señales activas</div>
+        <div class="alerts-list" id="alerts-list">
+          <div class="empty-state">Cargando alertas...</div>
+        </div>
+
+        <div style="margin-top:1.75rem;">
+          <div class="section-title">Cómo funciona la señal compuesta</div>
+          <div class="alerts-list">
+            <div class="alert-item">
+              <div class="alert-icon alert-buy-icon"><i class="ti ti-trending-down" aria-hidden="true"></i></div>
+              <div class="alert-content">
+                <div class="alert-title">Técnico (50%) — RSI + Medias Móviles</div>
+                <div class="alert-desc">RSI sobrevendido y Golden Cross (MA20 &gt; MA50) generan la señal técnica base.</div>
               </div>
             </div>
-            <div>
-              <div class="config-label">Actualización automática</div>
-              <select id="refresh-interval">
-                <option>Cada 5 minutos</option>
-                <option>Cada 15 minutos</option>
-                <option selected>Cada 30 minutos</option>
-                <option>Manual</option>
-              </select>
+            <div class="alert-item">
+              <div class="alert-icon alert-buy-icon"><i class="ti ti-building-bank" aria-hidden="true"></i></div>
+              <div class="alert-content">
+                <div class="alert-title">Fundamental (30%) — Solidez del activo</div>
+                <div class="alert-desc">Capitalización, ranking, liquidez (criptos) y estabilidad sectorial (acciones).</div>
+              </div>
+            </div>
+            <div class="alert-item">
+              <div class="alert-icon alert-warn-icon"><i class="ti ti-world" aria-hidden="true"></i></div>
+              <div class="alert-content">
+                <div class="alert-title">Macro (20%) — Contexto de mercado</div>
+                <div class="alert-desc">Índice de miedo/codicia y capitalización global. Miedo extremo = oportunidad contrarian.</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div style="margin-top:1rem; display:flex; justify-content:flex-end;">
-        <button class="btn-primary" onclick="refreshAll()">
-          <i class="ti ti-refresh" aria-hidden="true"></i> Actualizar ahora
-        </button>
-      </div>
-    </div>
 
-  </div><!-- end .dash -->
+      <!-- TAB: MACRO -->
+      <div id="tab-macro" style="display:none;">
+        <div class="page-header">
+          <div class="page-title">Contexto Macro</div>
+          <div class="page-subtitle">Estado del mercado global y su peso en la señal</div>
+        </div>
+        <div id="macro-content">
+          <div class="empty-state">Cargando contexto macro...</div>
+        </div>
+      </div>
+
+      <!-- TAB: RIESGO -->
+      <div id="tab-riesgo" style="display:none;">
+        <div class="page-header">
+          <div class="page-title">Gestión de Riesgo</div>
+          <div class="page-subtitle">Diversificación, correlación y asignación óptima</div>
+        </div>
+        <div id="riesgo-content">
+          <div class="empty-state">Cargando análisis de riesgo...</div>
+        </div>
+      </div>
+
+      <!-- TAB: AYUDA -->
+      <div id="tab-ayuda" style="display:none;">
+        <div class="page-header">
+          <div class="page-title">Guía de Conceptos</div>
+          <div class="page-subtitle">Todo lo que necesitás saber para interpretar los indicadores</div>
+        </div>
+        <div id="ayuda-content"></div>
+      </div>
+
+      <!-- TAB: CONFIG -->
+      <div id="tab-config" style="display:none;">
+        <div class="page-header">
+          <div class="page-title">Configurar</div>
+          <div class="page-subtitle">Gestión de watchlist y parámetros de análisis</div>
+        </div>
+
+        <div class="section-title">Agregar activo a watchlist</div>
+        <div class="add-bar">
+          <input class="add-input" id="new-ticker" placeholder="Ej: bitcoin, ethereum, AAPL, BTC..." />
+          <button class="btn-primary" onclick="addAsset()">+ Agregar</button>
+        </div>
+        <div id="add-msg" class="add-msg"></div>
+
+        <div class="section-title">Gestionar watchlist</div>
+        <div id="config-list"></div>
+
+        <div style="margin-top:1.75rem;">
+          <div class="section-title">Parámetros de análisis</div>
+          <div class="config-box">
+            <div class="config-grid">
+              <div>
+                <div class="config-label">RSI señal compra (≤)</div>
+                <div class="slider-row">
+                  <input type="range" min="20" max="45" value="35" step="1" id="rsi-thresh"
+                    oninput="document.getElementById('rsi-val').textContent = this.value" />
+                  <span id="rsi-val">35</span>
+                </div>
+              </div>
+              <div>
+                <div class="config-label">Actualización automática</div>
+                <select id="refresh-interval">
+                  <option>Cada 5 minutos</option>
+                  <option>Cada 15 minutos</option>
+                  <option selected>Cada 30 minutos</option>
+                  <option>Manual</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:1rem; display:flex; justify-content:flex-end;">
+          <button class="btn-primary" onclick="refreshAll()">
+            <i class="ti ti-refresh" aria-hidden="true"></i> Actualizar ahora
+          </button>
+        </div>
+      </div>
+
+    </main>
+  </div>
 
   <script src="src/data.js"></script>
   <script src="src/analysis.js"></script>
+  <script src="src/fundamental.js"></script>
+  <script src="src/macro.js"></script>
+  <script src="src/risk.js"></script>
   <script src="src/ui.js"></script>
   <script src="src/app.js"></script>
 </body>

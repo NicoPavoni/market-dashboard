@@ -124,6 +124,31 @@ function simulateStockPrices(assetId, days = 91) {
 }
 
 /**
+ * Composite score combining technical (50%), fundamental (30%), and macro (20%).
+ * Returns { techScore, composite, compositeSignal }.
+ */
+function getCompositeScore(rsi, ma20, ma50, change24h, rsiThreshold, fundamentalScore, macroScore) {
+  let techScore = 50;
+  if (rsi <= rsiThreshold) techScore += 30;
+  else if (rsi <= rsiThreshold + 10) techScore += 15;
+  else if (rsi >= 70) techScore -= 25;
+  if (ma20 && ma50 && ma20 > ma50) techScore += 20;
+  if (ma20 && ma50 && ma20 > ma50 && change24h < -3) techScore += 10;
+  techScore = Math.max(0, Math.min(100, techScore));
+
+  const fScore = fundamentalScore ?? 50;
+  const mScore = macroScore ?? 50;
+  const composite = Math.round(techScore * 0.50 + fScore * 0.30 + mScore * 0.20);
+
+  const compositeSignal =
+    composite >= 68 ? 'buy'     :
+    composite >= 50 ? 'wait'    :
+    composite >= 32 ? 'neutral' : 'sell';
+
+  return { techScore, composite, compositeSignal };
+}
+
+/**
  * Load price data for a single asset (crypto = real, stock = simulated).
  * Returns enriched object ready for rendering.
  */
