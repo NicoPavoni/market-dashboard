@@ -115,15 +115,20 @@ body {
 
 .nav-divider { height: 0.5px; background: var(--border); margin: 8px 4px; }
 
-.sidebar-footer { border-top: 0.5px solid var(--border); padding: 12px 16px; }
-
+.sidebar-footer {
+  border-top: 0.5px solid var(--border);
+  padding: 10px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .sidebar-status {
   display: flex;
-  align-items: flex-start;
-  gap: 7px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
   font-size: 11px;
   color: var(--text-secondary);
-  line-height: 1.4;
 }
 
 .dot {
@@ -655,6 +660,140 @@ select {
 }
 .help-key i { flex-shrink: 0; margin-top: 1px; }
 
+/* ── Portfolio tab ── */
+.portfolio-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 0;
+}
+.metric-sell { border-top: 2.5px solid var(--red); }
+
+.positions-list { display: flex; flex-direction: column; gap: 12px; }
+
+.position-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.position-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 10px;
+}
+.position-name   { font-size: 15px; font-weight: 700; }
+.position-ticker { font-weight: 400; color: var(--text-secondary); font-size: 14px; }
+.position-qty    { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+
+.position-pnl     { text-align: right; flex-shrink: 0; }
+.position-pnl-val { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.position-pnl-pct { font-size: 13px; font-weight: 500; margin-top: 2px; }
+
+.pos-no-price {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--amber);
+  background: #FFF4E5;
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  margin-bottom: 12px;
+}
+.pos-no-price i { font-size: 14px; }
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.position-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.pos-stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 500; }
+.pos-stat-val   { font-size: 14px; font-weight: 600; }
+
+.pnl-bar-track {
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.pnl-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+.trade-list-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.trade-list { display: flex; flex-direction: column; gap: 4px; }
+
+.trade-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.trade-row-left  { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.trade-row-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.trade-date      { font-weight: 600; color: var(--text); }
+.trade-detail    { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trade-usd       { font-weight: 600; white-space: nowrap; }
+
+/* ── Add trade form ── */
+.add-trade-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.trade-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.form-group { display: flex; flex-direction: column; }
+.form-hint  { font-weight: 400; color: var(--text-secondary); font-size: 10px; margin-left: 4px; }
+
+.trade-calc {
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 9px 12px;
+  font-size: 13px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.calc-muted { color: var(--text-secondary); font-size: 12px; }
+.calc-item  { color: var(--text); }
+.calc-sep   { color: var(--text-secondary); }
+
 /* ── Primary button ── */
 .btn-primary {
   padding: 8px 16px;
@@ -673,6 +812,174 @@ select {
   transition: opacity 0.15s;
 }
 .btn-primary:hover { opacity: 0.82; }
+
+/* ── Cloud sync ── */
+.db-status-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.db-status-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+.db-status-dot.connected {
+  background: var(--green);
+  opacity: 1;
+  animation: pulse 2.5s infinite;
+}
+.db-setup-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+.db-setup-steps {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  border: 0.5px solid var(--border);
+}
+.db-setup-steps code {
+  background: var(--border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
+}
+.btn-outline-danger {
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+.btn-outline-danger:hover { background: rgba(226,75,74,0.08); }
+
+/* ── Logout button ── */
+.logout-btn {
+  color: var(--red) !important;
+  margin-top: 6px;
+}
+.logout-btn:hover {
+  background: rgba(226, 75, 74, 0.10) !important;
+  color: var(--red) !important;
+}
+
+/* ── Auth screen ─────────────────────────────────────────────────────── */
+#auth-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-secondary);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 1.25rem;
+}
+
+.auth-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  padding: 36px 32px 32px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.auth-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 22px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 11px 14px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(24,95,165,0.12);
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.1s;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.auth-btn:hover  { opacity: 0.88; }
+.auth-btn:active { transform: scale(0.98); }
+
+.auth-msg {
+  font-size: 13px;
+  min-height: 22px;
+  margin-top: 12px;
+}
+.auth-error { color: var(--red); }
+.auth-ok    { color: var(--green); }
+
+@keyframes authShake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-7px); }
+  40%       { transform: translateX(7px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+.auth-shake { animation: authShake 0.42s ease; }
 
 /* ── Responsive ── */
 @media (max-width: 640px) {

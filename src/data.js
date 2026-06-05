@@ -68,6 +68,26 @@ const KNOWN_ASSETS = {
   'ko':         { id: 'coca-cola',         ticker: 'KO',   name: 'Coca-Cola',     type: 'stock' },
   'jpm':        { id: 'jpmorgan',          ticker: 'JPM',  name: 'JPMorgan',      type: 'stock' },
   'v':          { id: 'visa',              ticker: 'V',    name: 'Visa',          type: 'stock' },
+  'amd':        { id: 'amd',              ticker: 'AMD',  name: 'AMD',            type: 'stock' },
+  'pypl':       { id: 'paypal',           ticker: 'PYPL', name: 'PayPal',         type: 'stock' },
+  'paypal':     { id: 'paypal',           ticker: 'PYPL', name: 'PayPal',         type: 'stock' },
+  'uber':       { id: 'uber',             ticker: 'UBER', name: 'Uber',           type: 'stock' },
+  'baba':       { id: 'alibaba',          ticker: 'BABA', name: 'Alibaba',        type: 'stock' },
+  'alibaba':    { id: 'alibaba',          ticker: 'BABA', name: 'Alibaba',        type: 'stock' },
+
+  // ── Latam & Índices ────────────────────────────────────────────────────
+  'spy':        { id: 'sp500',            ticker: 'SPY',  name: 'S&P 500',        type: 'stock' },
+  'sp500':      { id: 'sp500',            ticker: 'SPY',  name: 'S&P 500',        type: 'stock' },
+  'spx':        { id: 'sp500',            ticker: 'SPY',  name: 'S&P 500',        type: 'stock' },
+  'ypf':        { id: 'ypf',              ticker: 'YPF',  name: 'YPF',            type: 'stock' },
+  'meli':       { id: 'mercadolibre',     ticker: 'MELI', name: 'Mercado Libre',  type: 'stock' },
+  'mercadolibre':{ id: 'mercadolibre',   ticker: 'MELI', name: 'Mercado Libre',  type: 'stock' },
+  'glob':       { id: 'globant',          ticker: 'GLOB', name: 'Globant',        type: 'stock' },
+  'globant':    { id: 'globant',          ticker: 'GLOB', name: 'Globant',        type: 'stock' },
+  'desp':       { id: 'despegar',         ticker: 'DESP', name: 'Despegar',       type: 'stock' },
+  'despegar':   { id: 'despegar',         ticker: 'DESP', name: 'Despegar',       type: 'stock' },
+  'loma':       { id: 'loma-negra',       ticker: 'LOMA', name: 'Loma Negra',     type: 'stock' },
+  'pamp':       { id: 'pampa-energia',    ticker: 'PAM',  name: 'Pampa Energía',  type: 'stock' },
 };
 
 // Simulated base prices for stocks (used when real API not available)
@@ -84,4 +104,15 @@ const STOCK_BASE_PRICES = {
   'coca-cola':          63,
   'jpmorgan':          200,
   'visa':              275,
+  'amd':               168,
+  'paypal':             73,
+  'uber':               79,
+  'alibaba':           110,
+  'sp500':             545,
+  'ypf':                30,
+  'mercadolibre':     2050,
+  'globant':           168,
+  'despegar':           11,
+  'loma-negra':         10,
+  'pampa-energia':      55,
 };

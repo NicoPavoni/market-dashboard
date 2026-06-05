@@ -9,8 +9,19 @@ const STOCK_FUNDAMENTALS = {
   'netflix':           { sector: 'Streaming',        mcapTier: 'Large Cap', stabilityScore: 65 },
   'disney':            { sector: 'Entretenimiento',  mcapTier: 'Large Cap', stabilityScore: 68 },
   'coca-cola':         { sector: 'Consumo Básico',   mcapTier: 'Large Cap', stabilityScore: 88 },
-  'jpmorgan':          { sector: 'Banca',            mcapTier: 'Mega Cap',  stabilityScore: 82 },
+  'jpmorgan':          { sector: 'Banca',             mcapTier: 'Mega Cap',  stabilityScore: 82 },
   'visa':              { sector: 'Fintech/Pagos',    mcapTier: 'Mega Cap',  stabilityScore: 93 },
+  'amd':               { sector: 'Semiconductores',  mcapTier: 'Large Cap', stabilityScore: 74 },
+  'paypal':            { sector: 'Fintech/Pagos',    mcapTier: 'Large Cap', stabilityScore: 65 },
+  'uber':              { sector: 'Plataformas Tech', mcapTier: 'Large Cap', stabilityScore: 64 },
+  'alibaba':           { sector: 'E-commerce/Asia',  mcapTier: 'Large Cap', stabilityScore: 58 },
+  'sp500':             { sector: 'Índice S&P 500',   mcapTier: 'Índice',    stabilityScore: 97 },
+  'ypf':               { sector: 'Energía/Argentina',mcapTier: 'Mid Cap',   stabilityScore: 36 },
+  'mercadolibre':      { sector: 'E-comm./LatAm',    mcapTier: 'Large Cap', stabilityScore: 74 },
+  'globant':           { sector: 'Tecnología/LatAm', mcapTier: 'Mid Cap',   stabilityScore: 70 },
+  'despegar':          { sector: 'Turismo/LatAm',    mcapTier: 'Small Cap', stabilityScore: 44 },
+  'loma-negra':        { sector: 'Construcción/ARG', mcapTier: 'Small Cap', stabilityScore: 40 },
+  'pampa-energia':     { sector: 'Energía/Argentina',mcapTier: 'Mid Cap',   stabilityScore: 42 },
 };
 
 async function fetchAllCryptoFundamentals(coinIds) {

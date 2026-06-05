@@ -636,7 +636,7 @@ function renderHelpPanel() {
 // Tab switching
 // ─────────────────────────────────────────────
 
-const TAB_ORDER = ['watchlist', 'alertas', 'macro', 'riesgo', 'ayuda', 'config'];
+const TAB_ORDER = ['watchlist', 'alertas', 'macro', 'riesgo', 'portafolio', 'ayuda', 'config'];
 
 function switchTabUI(tab) {
   TAB_ORDER.forEach(t => {
@@ -656,4 +656,200 @@ function setTFUI(tf, btn, selectedId, priceData) {
   document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (selectedId) renderChart(selectedId, tf, priceData);
+}
+
+// ─────────────────────────────────────────────
+// Portfolio tab
+// ─────────────────────────────────────────────
+
+function formatTradeDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatUsd(n) {
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renderAddTradeFormHTML() {
+  const assets = getUniqueAssetOptions();
+  const cryptoOpts = assets
+    .filter(a => a.type === 'crypto')
+    .map(a => `<option value="${a.id}" data-ticker="${a.ticker}">${a.ticker} — ${a.name}</option>`)
+    .join('');
+  const stockOpts = assets
+    .filter(a => a.type === 'stock')
+    .map(a => `<option value="${a.id}" data-ticker="${a.ticker}">${a.ticker} — ${a.name}</option>`)
+    .join('');
+
+  const today = new Date().toISOString().split('T')[0];
+
+  return `<div class="add-trade-card">
+    <div class="trade-form-grid">
+      <div class="form-group">
+        <label class="config-label">Activo</label>
+        <select id="trade-asset" onchange="updateTradePriceField()">
+          <option value="">Seleccionar activo...</option>
+          <optgroup label="Criptomonedas">${cryptoOpts}</optgroup>
+          <optgroup label="Acciones">${stockOpts}</optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="config-label">Fecha de compra</label>
+        <input type="date" class="add-input" id="trade-date" value="${today}" />
+      </div>
+      <div class="form-group">
+        <label class="config-label">Monto en pesos ARS $</label>
+        <input type="number" class="add-input" id="trade-ars"
+          placeholder="200000" min="0" oninput="updateTradeCalc()" />
+      </div>
+      <div class="form-group">
+        <label class="config-label">
+          Tipo de cambio ARS/USD
+          <span class="form-hint">dólar MEP/CCL/cripto</span>
+        </label>
+        <input type="number" class="add-input" id="trade-rate"
+          placeholder="1200" value="1200" min="1" oninput="updateTradeCalc()" />
+      </div>
+      <div class="form-group">
+        <label class="config-label">
+          Precio de compra (USD)
+          <span class="form-hint">se completa automáticamente</span>
+        </label>
+        <input type="number" class="add-input" id="trade-price"
+          placeholder="62400" min="0" step="any" oninput="updateTradeCalc()" />
+      </div>
+      <div class="form-group">
+        <label class="config-label">Resultado calculado</label>
+        <div class="trade-calc" id="trade-calc">
+          <span class="calc-muted">Completá los campos para calcular</span>
+        </div>
+      </div>
+    </div>
+    <div id="trade-msg" class="add-msg"></div>
+    <button class="btn-primary" onclick="submitTrade()">
+      <i class="ti ti-plus" aria-hidden="true"></i> Registrar compra
+    </button>
+  </div>`;
+}
+
+function renderPositionCard(pos) {
+  const pnlSign = pos.pnlUsd >= 0 ? '+' : '';
+  const pnlCls  = pos.pnlUsd >= 0 ? 'green' : 'red';
+  const pnlBarW = Math.min(100, Math.abs(pos.pnlPct) * 2);
+  const barColor = pos.pnlUsd >= 0 ? 'var(--green)' : 'var(--red)';
+
+  const noPriceWarning = !pos.hasPrice
+    ? `<div class="pos-no-price">
+        <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+        Este activo no está en tu watchlist. <button class="link-btn" onclick="addAssetToWatchlistFromPortfolio('${pos.assetId}')">Agregar</button> para ver el precio actual.
+       </div>`
+    : '';
+
+  const tradesHTML = pos.trades.map(t => {
+    const arsStr = t.arsAmount
+      ? `$${t.arsAmount.toLocaleString('es-AR')} ARS (1 USD = $${t.arsUsdRate.toLocaleString('es-AR')})`
+      : '';
+    return `<div class="trade-row">
+      <div class="trade-row-left">
+        <span class="trade-date">${formatTradeDate(t.date)}</span>
+        <span class="trade-detail">
+          ${arsStr ? arsStr + ' · ' : ''}
+          ${t.quantity.toFixed(6)} ${t.ticker} a ${formatUsd(t.priceUsd)}
+        </span>
+      </div>
+      <div class="trade-row-right">
+        <span class="trade-usd">${formatUsd(t.usdInvested)}</span>
+        <button class="btn-remove" onclick="deleteTrade('${t.id}')" aria-label="Eliminar compra">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="position-card">
+    <div class="position-header">
+      <div class="position-info">
+        <div class="position-name">${pos.assetName} <span class="position-ticker">${pos.ticker}</span></div>
+        <div class="position-qty">${pos.totalQuantity.toFixed(6)} ${pos.ticker} en total</div>
+      </div>
+      <div class="position-pnl">
+        <div class="position-pnl-val ${pnlCls}">${pnlSign}${formatUsd(pos.pnlUsd)}</div>
+        <div class="position-pnl-pct ${pnlCls}">${pnlSign}${pos.pnlPct.toFixed(2)}%</div>
+      </div>
+    </div>
+
+    ${noPriceWarning}
+
+    <div class="position-stats">
+      <div class="pos-stat">
+        <div class="pos-stat-label">Precio prom. compra</div>
+        <div class="pos-stat-val">${formatPrice(pos.avgBuyPrice)}</div>
+      </div>
+      <div class="pos-stat">
+        <div class="pos-stat-label">Precio actual</div>
+        <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatPrice(pos.currentPrice) : '—'}</div>
+      </div>
+      <div class="pos-stat">
+        <div class="pos-stat-label">Invertido</div>
+        <div class="pos-stat-val">${formatUsd(pos.totalUsdInvested)} USD</div>
+      </div>
+      <div class="pos-stat">
+        <div class="pos-stat-label">Valor actual</div>
+        <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatUsd(pos.currentValue) + ' USD' : '—'}</div>
+      </div>
+    </div>
+
+    <div class="pnl-bar-track">
+      <div class="pnl-bar-fill" style="width:${pnlBarW}%; background:${barColor}"></div>
+    </div>
+
+    <div class="trade-list-label">Compras registradas</div>
+    <div class="trade-list">${tradesHTML}</div>
+  </div>`;
+}
+
+function renderPortfolio(priceData) {
+  const container = document.getElementById('portfolio-content');
+  if (!container) return;
+
+  const pf = computePortfolio(priceData);
+
+  const totalPnlSign = pf.totalPnlUsd >= 0 ? '+' : '';
+  const totalPnlCls  = pf.totalPnlUsd >= 0 ? 'green' : 'red';
+
+  const summaryHTML = pf.trades.length
+    ? `<div class="portfolio-summary">
+        <div class="metric">
+          <div class="metric-label">Total invertido</div>
+          <div class="metric-val small">${formatUsd(pf.totalUsdInvested)}</div>
+          <div class="metric-sub muted">USD acumulados</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Valor actual</div>
+          <div class="metric-val small">${formatUsd(pf.totalCurrentValue)}</div>
+          <div class="metric-sub muted">al precio de hoy</div>
+        </div>
+        <div class="metric ${pf.totalPnlUsd >= 0 ? 'metric-buy' : 'metric-sell'}">
+          <div class="metric-label">Ganancia / Pérdida</div>
+          <div class="metric-val small ${totalPnlCls}">${totalPnlSign}${formatUsd(pf.totalPnlUsd)}</div>
+          <div class="metric-sub ${totalPnlCls}">${totalPnlSign}${pf.totalPnlPct.toFixed(2)}%</div>
+        </div>
+      </div>`
+    : '';
+
+  const positionsHTML = pf.positions.length
+    ? `<div class="section-title" style="margin-top:1.5rem">Mis posiciones</div>
+       <div class="positions-list">${pf.positions.map(renderPositionCard).join('')}</div>`
+    : `<div class="empty-state" style="margin-bottom:1.5rem">
+         <i class="ti ti-wallet" style="font-size:32px;display:block;margin-bottom:10px;opacity:0.35;"></i>
+         Todavía no registraste ninguna compra. Usá el formulario para empezar.
+       </div>`;
+
+  container.innerHTML = `
+    ${summaryHTML}
+    ${positionsHTML}
+    <div class="section-title" style="margin-top:1.5rem">Registrar nueva compra</div>
+    ${renderAddTradeFormHTML()}
+  `;
 }
