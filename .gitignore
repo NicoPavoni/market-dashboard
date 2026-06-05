@@ -1,0 +1,10 @@
+# Claude Code memory (internal, not needed in repo)
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.swp

@@ -9,16 +9,16 @@ function loadTrades() {
   }
 }
 
-function saveTrades(trades, _skipCloud) {
+function saveTrades(trades) {
   localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(trades));
-  if (!_skipCloud) dbSaveTrades(trades); // fire and forget
+  dbSaveTrades(trades); // sync to Firebase (fire and forget)
 }
 
 async function syncTradesFromCloud() {
   if (!dbIsConfigured()) return false;
   const cloud = await dbLoadTrades();
   if (cloud !== null) {
-    saveTrades(cloud, true); // update local only, don't echo back
+    localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(cloud)); // update local only
     return true;
   }
   return false;

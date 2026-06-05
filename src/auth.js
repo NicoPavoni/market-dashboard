@@ -1,73 +1,58 @@
-const _AUTH_PASS_KEY = 'mktdash_pass';
-const _AUTH_SESS_KEY = 'mktdash_auth';
+// ─── Firebase Authentication ──────────────────────────────────────────────────
+// Credentials are validated server-side by Firebase.
+// No one can bypass auth by inspecting client-side code.
+// ─────────────────────────────────────────────────────────────────────────────
 
-async function _sha256(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function authIsAuthenticated() {
-  return sessionStorage.getItem(_AUTH_SESS_KEY) === '1';
-}
-
-function authHasPassword() {
-  return !!localStorage.getItem(_AUTH_PASS_KEY);
-}
-
-async function authSetupPassword(password) {
-  if (!password || password.length < 4) return { ok: false, msg: 'Mínimo 4 caracteres.' };
-  const hash = await _sha256(password);
-  localStorage.setItem(_AUTH_PASS_KEY, hash);
-  sessionStorage.setItem(_AUTH_SESS_KEY, '1');
-  return { ok: true };
+// Waits for Firebase to determine the initial auth state, then resolves.
+// Returns the Firebase User object if logged in, or null if not.
+function waitForAuth() {
+  return new Promise(resolve => {
+    const unsub = firebase.auth().onAuthStateChanged(user => {
+      unsub();
+      resolve(user);
+    });
+  });
 }
 
 async function authLogin(password) {
-  const stored = localStorage.getItem(_AUTH_PASS_KEY);
-  if (!stored) return { ok: false, msg: 'Sin contraseña configurada.' };
-  const hash = await _sha256(password);
-  if (hash === stored) {
-    sessionStorage.setItem(_AUTH_SESS_KEY, '1');
+  const email = (typeof AUTH_EMAIL !== 'undefined' ? AUTH_EMAIL : '').trim();
+
+  if (!email || email === 'tu@email.com') {
+    return { ok: false, msg: 'Configurá AUTH_EMAIL en firebase-config.js antes de usar la app.' };
+  }
+
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, password);
     return { ok: true };
+  } catch (e) {
+    const MSGS = {
+      'auth/wrong-password':         'Contraseña incorrecta.',
+      'auth/invalid-credential':     'Contraseña incorrecta.',
+      'auth/user-not-found':         'Cuenta no encontrada.',
+      'auth/invalid-email':          'Email inválido.',
+      'auth/too-many-requests':      'Demasiados intentos. Esperá unos minutos.',
+      'auth/network-request-failed': 'Error de red. Verificá tu conexión.',
+      'auth/app-not-initialized':    'Firebase no configurado. Completá firebase-config.js.',
+    };
+    return { ok: false, msg: MSGS[e.code] || 'Error: ' + e.message };
   }
-  return { ok: false, msg: 'Contraseña incorrecta.' };
 }
 
-async function authChangePassword(currentPw, newPw, confirmPw) {
-  if (!newPw || newPw.length < 4) return { ok: false, msg: 'Mínimo 4 caracteres.' };
-  if (newPw !== confirmPw)        return { ok: false, msg: 'Las contraseñas no coinciden.' };
-  const stored = localStorage.getItem(_AUTH_PASS_KEY);
-  if (stored) {
-    const hash = await _sha256(currentPw);
-    if (hash !== stored) return { ok: false, msg: 'Contraseña actual incorrecta.' };
-  }
-  const newHash = await _sha256(newPw);
-  localStorage.setItem(_AUTH_PASS_KEY, newHash);
-  return { ok: true };
-}
-
-function authLogout() {
-  sessionStorage.removeItem(_AUTH_SESS_KEY);
+async function authLogout() {
+  await firebase.auth().signOut();
   location.reload();
 }
 
-// Called once at bootstrap. Returns true → show app. Returns false → show login.
-function initAuthGate() {
-  const appEl  = document.getElementById('app-container');
-  const authEl = document.getElementById('auth-screen');
-
-  if (authIsAuthenticated()) {
-    appEl.style.display  = 'flex';
-    authEl.style.display = 'none';
-    return true;
+async function authChangePassword(newPw, confirmPw) {
+  if (!newPw || newPw.length < 6) return { ok: false, msg: 'Mínimo 6 caracteres.' };
+  if (newPw !== confirmPw)        return { ok: false, msg: 'Las contraseñas no coinciden.' };
+  try {
+    await firebase.auth().currentUser.updatePassword(newPw);
+    return { ok: true };
+  } catch (e) {
+    if (e.code === 'auth/requires-recent-login') {
+      return { ok: false, msg: 'Cerrá sesión y volvé a entrar antes de cambiar la contraseña.' };
+    }
+    return { ok: false, msg: e.message };
   }
-
-  appEl.style.display  = 'none';
-  authEl.style.display = 'flex';
-
-  const hasPass = authHasPassword();
-  document.getElementById('auth-panel-setup').style.display = hasPass ? 'none'  : 'block';
-  document.getElementById('auth-panel-login').style.display = hasPass ? 'block' : 'none';
-
-  return false;
 }

@@ -24,40 +24,19 @@
         </div>
       </div>
 
-      <!-- Primera vez: crear contraseña -->
-      <div id="auth-panel-setup">
-        <p class="auth-desc">
-          Primera vez que accedés. Elegí una contraseña para proteger tu panel.<br>
-          La contraseña se guarda hasheada en este dispositivo.
-        </p>
-        <div class="auth-form">
-          <input type="password" id="auth-new-pw" class="auth-input"
-            placeholder="Nueva contraseña (mínimo 4 caracteres)"
-            autocomplete="new-password"
-            onkeydown="if(event.key==='Enter') doAuthSetup()" />
-          <input type="password" id="auth-new-pw2" class="auth-input"
-            placeholder="Confirmar contraseña"
-            autocomplete="new-password"
-            onkeydown="if(event.key==='Enter') doAuthSetup()" />
-          <button class="auth-btn" onclick="doAuthSetup()">Crear contraseña y entrar</button>
-        </div>
-        <div class="auth-msg" id="auth-setup-msg"></div>
+      <p class="auth-desc">Ingresá tu contraseña para acceder a tu panel de inversiones.</p>
+
+      <div class="auth-form">
+        <input type="password" id="auth-pw" class="auth-input"
+          placeholder="Contraseña"
+          autocomplete="current-password"
+          onkeydown="if(event.key==='Enter') doAuthLogin()" />
+        <button class="auth-btn" onclick="doAuthLogin()">
+          <i class="ti ti-lock-open" aria-hidden="true"></i> Ingresar
+        </button>
       </div>
 
-      <!-- Login normal -->
-      <div id="auth-panel-login" style="display:none;">
-        <p class="auth-desc">Panel de inversiones privado. Ingresá tu contraseña para continuar.</p>
-        <div class="auth-form">
-          <input type="password" id="auth-pw" class="auth-input"
-            placeholder="Contraseña"
-            autocomplete="current-password"
-            onkeydown="if(event.key==='Enter') doAuthLogin()" />
-          <button class="auth-btn" onclick="doAuthLogin()">
-            <i class="ti ti-lock-open" aria-hidden="true"></i> Ingresar
-          </button>
-        </div>
-        <div class="auth-msg" id="auth-login-msg"></div>
-      </div>
+      <div class="auth-msg" id="auth-login-msg"></div>
 
     </div>
   </div>
@@ -309,73 +288,25 @@
         </div>
 
         <div style="margin-top:1.75rem;">
-          <div class="section-title">Sincronización en la nube</div>
-          <div class="config-box">
-            <div class="db-status-row">
-              <div class="db-status-dot" id="db-status-dot"></div>
-              <span id="db-status-text">No configurado — los datos se guardan solo en este dispositivo.</span>
-            </div>
-
-            <div id="db-form-connected" style="display:none; margin-top:14px;">
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="btn-primary" onclick="doDbSync()">
-                  <i class="ti ti-refresh" aria-hidden="true"></i> Sincronizar ahora
-                </button>
-                <button class="btn-outline-danger" onclick="doDbDisconnect()">
-                  <i class="ti ti-unlink" aria-hidden="true"></i> Desconectar
-                </button>
-              </div>
-            </div>
-
-            <div id="db-form-setup" style="margin-top:14px;">
-              <p class="db-setup-desc">
-                Conectá un <strong>GitHub Personal Access Token</strong> para guardar tus compras en la nube y acceder desde cualquier dispositivo.
-                Necesitás el scope <code>gist</code>.
-              </p>
-              <p class="db-setup-steps">
-                1. Andá a <strong>github.com → Settings → Developer settings → Personal access tokens</strong><br>
-                2. Generá un token con permiso <strong>Gists: Read and write</strong><br>
-                3. Pegalo acá:
-              </p>
-              <div class="add-bar" style="margin-top:10px;">
-                <input type="password" class="add-input" id="db-token-input"
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  onkeydown="if(event.key==='Enter') doDbConnect()" />
-                <button class="btn-primary" onclick="doDbConnect()">
-                  <i class="ti ti-brand-github" aria-hidden="true"></i> Conectar
-                </button>
-              </div>
-              <div class="add-msg" id="db-connect-msg"></div>
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-top:1.75rem;">
-          <div class="section-title">Seguridad</div>
+          <div class="section-title">Cambiar contraseña</div>
           <div class="config-box">
             <div class="config-grid">
               <div>
-                <div class="config-label">Contraseña actual</div>
-                <input class="add-input" type="password" id="sec-cur-pw"
-                  placeholder="Contraseña actual" autocomplete="current-password" />
-              </div>
-              <div>
-                <div class="config-label">Nueva contraseña</div>
+                <div class="config-label">Nueva contraseña <span class="form-hint">(mínimo 6 caracteres)</span></div>
                 <input class="add-input" type="password" id="sec-new-pw"
                   placeholder="Nueva contraseña" autocomplete="new-password" />
               </div>
-            </div>
-            <div style="margin-top:12px;">
-              <input class="add-input" type="password" id="sec-new-pw2"
-                placeholder="Confirmar nueva contraseña"
-                autocomplete="new-password"
-                style="width:100%; margin-bottom:10px;" />
-              <div style="display:flex; justify-content:flex-end; gap:10px; align-items:center;">
-                <div class="add-msg" id="sec-msg" style="flex:1; margin:0;"></div>
-                <button class="btn-primary" onclick="doAuthChangePassword()">
-                  <i class="ti ti-lock" aria-hidden="true"></i> Cambiar contraseña
-                </button>
+              <div>
+                <div class="config-label">Confirmar contraseña</div>
+                <input class="add-input" type="password" id="sec-new-pw2"
+                  placeholder="Confirmar nueva contraseña" autocomplete="new-password" />
               </div>
+            </div>
+            <div style="margin-top:12px; display:flex; justify-content:flex-end; align-items:center; gap:10px;">
+              <div class="add-msg" id="sec-msg" style="flex:1; margin:0;"></div>
+              <button class="btn-primary" onclick="doAuthChangePassword()">
+                <i class="ti ti-lock" aria-hidden="true"></i> Cambiar contraseña
+              </button>
             </div>
           </div>
         </div>
@@ -390,6 +321,13 @@
     </main>
   </div>
 
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <!-- App scripts -->
+  <script src="src/firebase-config.js"></script>
   <script src="src/auth.js"></script>
   <script src="src/db.js"></script>
   <script src="src/data.js"></script>

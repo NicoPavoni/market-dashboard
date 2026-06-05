@@ -91,10 +91,10 @@ function refreshAll() {
 
 function switchTab(tab) {
   switchTabUI(tab);
-  if (tab === 'alertas') renderAlerts(watchlist, priceData);
-  if (tab === 'config')  { renderConfigList(watchlist, removeAsset.toString()); updateDbStatusUI(); }
-  if (tab === 'macro')   renderMacroPanel(macroData);
-  if (tab === 'riesgo')  renderRiskPanel(watchlist, priceData, fundamentalData, macroData);
+  if (tab === 'alertas')    renderAlerts(watchlist, priceData);
+  if (tab === 'config')     renderConfigList(watchlist, removeAsset.toString());
+  if (tab === 'macro')      renderMacroPanel(macroData);
+  if (tab === 'riesgo')     renderRiskPanel(watchlist, priceData, fundamentalData, macroData);
   if (tab === 'ayuda')      renderHelpPanel();
   if (tab === 'portafolio') renderPortfolio(priceData);
 }
@@ -215,11 +215,11 @@ function updateTradeCalc() {
 }
 
 async function submitTrade() {
-  const msgEl   = document.getElementById('trade-msg');
-  const assetId = document.getElementById('trade-asset')?.value;
-  const dateVal = document.getElementById('trade-date')?.value;
-  const arsVal  = parseFloat(document.getElementById('trade-ars')?.value);
-  const rateVal = parseFloat(document.getElementById('trade-rate')?.value);
+  const msgEl    = document.getElementById('trade-msg');
+  const assetId  = document.getElementById('trade-asset')?.value;
+  const dateVal  = document.getElementById('trade-date')?.value;
+  const arsVal   = parseFloat(document.getElementById('trade-ars')?.value);
+  const rateVal  = parseFloat(document.getElementById('trade-rate')?.value);
   const priceVal = parseFloat(document.getElementById('trade-price')?.value);
 
   if (!assetId || !dateVal || !arsVal || !rateVal || !priceVal) {
@@ -256,7 +256,6 @@ async function submitTrade() {
     quantity,
   });
 
-  // Auto-add asset to watchlist if not present
   if (!watchlist.find(w => w.id === asset.id)) {
     watchlist.push({ ...asset });
     await loadSingleAsset(asset);
@@ -291,75 +290,13 @@ async function addAssetToWatchlistFromPortfolio(assetId) {
   renderPortfolio(priceData);
 }
 
-// ─── Cloud sync handlers ──────────────────────────────────────────────
-
-async function doDbConnect() {
-  const token = document.getElementById('db-token-input')?.value ?? '';
-  const msgEl = document.getElementById('db-connect-msg');
-  msgEl.textContent = 'Conectando con GitHub...';
-  msgEl.style.color = 'var(--text-secondary)';
-
-  const r = await dbConnect(token);
-  if (r.ok) {
-    updateDbStatusUI();
-    msgEl.textContent = '';
-    // Push existing local trades to the cloud, then pull (cloud may have more)
-    const local = loadTrades();
-    if (local.length > 0) await dbSaveTrades(local);
-    const synced = await syncTradesFromCloud();
-    if (synced) renderPortfolio(priceData);
-  } else {
-    msgEl.textContent = '⚠ ' + r.msg;
-    msgEl.style.color = 'var(--red)';
-  }
-}
-
-function doDbDisconnect() {
-  if (!confirm('¿Desconectar la sincronización? Los datos locales se mantienen.')) return;
-  dbDisconnect();
-  updateDbStatusUI();
-}
-
-async function doDbSync() {
-  const btn = document.querySelector('[onclick="doDbSync()"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando...'; }
-  const synced = await syncTradesFromCloud();
-  if (synced) renderPortfolio(priceData);
-  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i> Sincronizar ahora'; }
-}
-
-function updateDbStatusUI() {
-  const configured = dbIsConfigured();
-  const dot        = document.getElementById('db-status-dot');
-  const txt        = document.getElementById('db-status-text');
-  const formSetup  = document.getElementById('db-form-setup');
-  const formConn   = document.getElementById('db-form-connected');
-  if (!dot) return;
-  dot.className    = 'db-status-dot' + (configured ? ' connected' : '');
-  txt.textContent  = configured
-    ? '✓ Conectado — datos sincronizados con GitHub Gist'
-    : 'No configurado — los datos se guardan solo en este dispositivo';
-  formSetup.style.display = configured ? 'none'  : 'block';
-  formConn.style.display  = configured ? 'block' : 'none';
-  const inp = document.getElementById('db-token-input');
-  if (inp) inp.value = '';
-}
-
-// ─── Auth UI handlers ─────────────────────────────────────────────────
+// ─── Auth handlers ────────────────────────────────────────────────────
 
 function _authMsg(id, text, isError) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = text;
   el.className   = 'auth-msg' + (isError ? ' auth-error' : ' auth-ok');
-}
-
-async function doAuthSetup() {
-  const pw1 = document.getElementById('auth-new-pw')?.value ?? '';
-  const pw2 = document.getElementById('auth-new-pw2')?.value ?? '';
-  if (pw1 !== pw2) { _authMsg('auth-setup-msg', 'Las contraseñas no coinciden.', true); return; }
-  const r = await authSetupPassword(pw1);
-  r.ok ? location.reload() : _authMsg('auth-setup-msg', r.msg, true);
 }
 
 async function doAuthLogin() {
@@ -375,20 +312,20 @@ async function doAuthLogin() {
 }
 
 async function doAuthChangePassword() {
-  const cur = document.getElementById('sec-cur-pw')?.value ?? '';
-  const nw  = document.getElementById('sec-new-pw')?.value ?? '';
+  const nw  = document.getElementById('sec-new-pw')?.value  ?? '';
   const nw2 = document.getElementById('sec-new-pw2')?.value ?? '';
-  const r   = await authChangePassword(cur, nw, nw2);
+  const msg = document.getElementById('sec-msg');
+  const r   = await authChangePassword(nw, nw2);
   if (r.ok) {
-    document.getElementById('sec-msg').textContent = '✓ Contraseña actualizada.';
-    document.getElementById('sec-msg').style.color = 'var(--green)';
-    ['sec-cur-pw','sec-new-pw','sec-new-pw2'].forEach(id => {
+    msg.textContent = '✓ Contraseña actualizada.';
+    msg.style.color = 'var(--green)';
+    ['sec-new-pw', 'sec-new-pw2'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
   } else {
-    document.getElementById('sec-msg').textContent = '⚠ ' + r.msg;
-    document.getElementById('sec-msg').style.color = 'var(--red)';
+    msg.textContent = '⚠ ' + r.msg;
+    msg.style.color = 'var(--red)';
   }
 }
 
@@ -404,7 +341,6 @@ async function syncPortfolioAssets() {
   const trades = loadTrades();
   const missingIds = [...new Set(trades.map(t => t.assetId))]
     .filter(id => !watchlist.find(a => a.id === id));
-
   for (const id of missingIds) {
     const asset = Object.values(KNOWN_ASSETS).find(a => a.id === id);
     if (asset) watchlist.push({ ...asset });
@@ -412,19 +348,30 @@ async function syncPortfolioAssets() {
 }
 
 (async () => {
-  if (!initAuthGate()) return;
+  // Wait for Firebase to determine auth state (resolves fast — uses cached credentials)
+  const user = await waitForAuth();
+
+  const appEl  = document.getElementById('app-container');
+  const authEl = document.getElementById('auth-screen');
+
+  if (!user) {
+    appEl.style.display  = 'none';
+    authEl.style.display = 'flex';
+    return;
+  }
+
+  appEl.style.display  = 'flex';
+  authEl.style.display = 'none';
 
   await syncPortfolioAssets();
   await loadAll();
   renderAssetList(watchlist, priceData);
 
-  if (watchlist.length > 0) {
-    selectAsset(watchlist[0].id);
-  }
+  if (watchlist.length > 0) selectAsset(watchlist[0].id);
 
   scheduleRefresh();
 
-  // Background: sync portfolio from cloud (non-blocking)
+  // Background: pull latest trades from Firebase
   syncTradesFromCloud().then(synced => {
     if (!synced) return;
     const ptab = document.getElementById('tab-portafolio');
