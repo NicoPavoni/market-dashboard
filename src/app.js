@@ -469,6 +469,107 @@ document.getElementById('new-ticker').addEventListener('keydown', e => {
   if (e.key === 'Enter') addAsset();
 });
 
+// ─── Initial balances (first-run seeding) ────────────────────────────
+
+const SEED_KEY = 'mktdash_seed_v1';
+const INITIAL_BALANCES = [
+  { key: 'sp500',  usd: 154 },
+  { key: 'nvidia', usd: 135 },
+  { key: 'ym34o',  usd: 354 },
+  { key: 'tlcto',  usd: 290 },
+];
+
+function _needsSeed() {
+  return !localStorage.getItem(SEED_KEY) && loadTrades().length === 0;
+}
+
+function seedInitialBalancesPreload() {
+  if (!_needsSeed()) return;
+  for (const { key } of INITIAL_BALANCES) {
+    const asset = KNOWN_ASSETS[key];
+    if (asset && !watchlist.find(w => w.id === asset.id)) {
+      watchlist.push({ ...asset });
+    }
+  }
+}
+
+async function seedInitialBalances() {
+  if (!_needsSeed()) {
+    localStorage.setItem(SEED_KEY, '1');
+    return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  for (const { key, usd } of INITIAL_BALANCES) {
+    const asset = KNOWN_ASSETS[key];
+    if (!asset) continue;
+    const price = priceData[asset.id]?.current || STOCK_BASE_PRICES[asset.id] || 1;
+    addTrade({
+      assetId:    asset.id,
+      ticker:     asset.ticker,
+      assetName:  asset.name,
+      assetType:  asset.type,
+      date:       today,
+      arsAmount:  0,
+      arsUsdRate: 1,
+      usdInvested: usd,
+      priceUsd:   price,
+      quantity:   usd / price,
+      isInitial:  true,
+    });
+  }
+  localStorage.setItem(SEED_KEY, '1');
+}
+
+async function addInitialBalance() {
+  const assetId = document.getElementById('initial-asset')?.value;
+  const usd     = parseFloat(document.getElementById('initial-usd')?.value);
+  const msgEl   = document.getElementById('initial-msg');
+
+  if (!assetId) {
+    msgEl.textContent = '⚠ Seleccioná un activo.';
+    msgEl.style.color = '#E24B4A';
+    return;
+  }
+  if (!usd || usd <= 0) {
+    msgEl.textContent = '⚠ Ingresá un monto válido en USD.';
+    msgEl.style.color = '#E24B4A';
+    return;
+  }
+
+  const asset = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  if (!asset) return;
+
+  if (!watchlist.find(w => w.id === assetId)) {
+    watchlist.push({ ...asset });
+    saveWatchlist();
+    await loadSingleAsset(asset);
+    computeCompositeScores();
+  }
+
+  const price = priceData[assetId]?.current || STOCK_BASE_PRICES[assetId] || 1;
+  const today = new Date().toISOString().slice(0, 10);
+
+  addTrade({
+    assetId:    asset.id,
+    ticker:     asset.ticker,
+    assetName:  asset.name,
+    assetType:  asset.type,
+    date:       today,
+    arsAmount:  0,
+    arsUsdRate: 1,
+    usdInvested: usd,
+    priceUsd:   price,
+    quantity:   usd / price,
+    isInitial:  true,
+  });
+
+  document.getElementById('initial-usd').value = '';
+  msgEl.textContent = `✓ Saldo inicial de ${formatUsd(usd)} registrado.`;
+  msgEl.style.color = '#1D9E75';
+
+  renderPortfolio(priceData);
+}
+
 // ─── Watchlist persistence ────────────────────────────────────────────
 
 function saveWatchlist() {
@@ -513,18 +614,20 @@ async function syncPortfolioAssets() {
   authEl.style.display = 'none';
 
   await syncWatchlistFromCloud();
+  // Sync trades from cloud before seeding to prevent double-seeding on new devices
+  const cloudSynced = await syncTradesFromCloud();
+  seedInitialBalancesPreload();
   await syncPortfolioAssets();
   await loadAll();
+  await seedInitialBalances();
   renderAssetList(watchlist, priceData);
 
   if (watchlist.length > 0) selectAsset(watchlist[0].id);
 
   scheduleRefresh();
 
-  // Background: pull latest trades from Firebase
-  syncTradesFromCloud().then(synced => {
-    if (!synced) return;
+  if (cloudSynced) {
     const ptab = document.getElementById('tab-portafolio');
     if (ptab && ptab.style.display !== 'none') renderPortfolio(priceData);
-  });
+  }
 })();

@@ -255,6 +255,19 @@ body {
   cursor: help;
 }
 
+/* ── Initial balance badge ── */
+.badge-initial {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #DDE8FA;
+  color: #1A4F9A;
+}
+
 /* ── Signal badges ── */
 .signal-badge {
   font-size: 11px;
@@ -540,6 +553,19 @@ body {
 }
 .add-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.08); }
 .add-msg { font-size: 12px; color: var(--text-secondary); min-height: 18px; margin-bottom: 1rem; }
+.form-info-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0 0 1rem;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  line-height: 1.5;
+}
+.form-info-text i { margin-top: 1px; flex-shrink: 0; }
 
 .config-box {
   background: var(--bg);

@@ -791,6 +791,49 @@ function renderAddTradeFormHTML() {
   </div>`;
 }
 
+function renderAddInitialBalanceFormHTML() {
+  const assets = getUniqueAssetOptions();
+  const cryptoOpts = assets
+    .filter(a => a.type === 'crypto')
+    .map(a => `<option value="${a.id}">${a.ticker} — ${a.name}</option>`)
+    .join('');
+  const stockOpts = assets
+    .filter(a => a.type === 'stock')
+    .map(a => `<option value="${a.id}">${a.ticker} — ${a.name}</option>`)
+    .join('');
+  const bondOpts = assets
+    .filter(a => a.type === 'bond')
+    .map(a => `<option value="${a.id}">${a.ticker} — ${a.name}</option>`)
+    .join('');
+
+  return `<div class="add-trade-card">
+    <p class="form-info-text">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      Registrá tenencias previas ingresando solo el monto en USD. La cantidad de unidades se calcula automáticamente al precio actual y sirve como base para trackear el rendimiento futuro.
+    </p>
+    <div class="trade-form-grid">
+      <div class="form-group">
+        <label class="config-label">Activo</label>
+        <select id="initial-asset">
+          <option value="">Seleccionar activo...</option>
+          <optgroup label="Criptomonedas">${cryptoOpts}</optgroup>
+          <optgroup label="Acciones / CEDEARs">${stockOpts}</optgroup>
+          <optgroup label="Bonos / Obligaciones Negociables">${bondOpts}</optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="config-label">Valor actual en USD</label>
+        <input type="number" class="add-input" id="initial-usd"
+          placeholder="154.00" min="0" step="0.01" />
+      </div>
+    </div>
+    <div id="initial-msg" class="add-msg"></div>
+    <button class="btn-primary" onclick="addInitialBalance()">
+      <i class="ti ti-database-import" aria-hidden="true"></i> Registrar saldo inicial
+    </button>
+  </div>`;
+}
+
 function renderPositionCard(pos) {
   const pnlSign = pos.pnlUsd >= 0 ? '+' : '';
   const pnlCls  = pos.pnlUsd >= 0 ? 'green' : 'red';
@@ -805,6 +848,20 @@ function renderPositionCard(pos) {
     : '';
 
   const tradesHTML = pos.trades.map(t => {
+    if (t.isInitial) {
+      return `<div class="trade-row">
+        <div class="trade-row-left">
+          <span class="trade-date">${formatTradeDate(t.date)}</span>
+          <span class="trade-detail"><span class="badge-initial">Saldo inicial</span></span>
+        </div>
+        <div class="trade-row-right">
+          <span class="trade-usd">${formatUsd(t.usdInvested)}</span>
+          <button class="btn-remove" onclick="deleteTrade('${t.id}')" aria-label="Eliminar saldo inicial">
+            <i class="ti ti-trash" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>`;
+    }
     const arsStr = t.arsAmount
       ? `$${t.arsAmount.toLocaleString('es-AR')} ARS (1 USD = $${t.arsUsdRate.toLocaleString('es-AR')})`
       : '';
@@ -862,7 +919,7 @@ function renderPositionCard(pos) {
       <div class="pnl-bar-fill" style="width:${pnlBarW}%; background:${barColor}"></div>
     </div>
 
-    <div class="trade-list-label">Compras registradas</div>
+    <div class="trade-list-label">Movimientos registrados</div>
     <div class="trade-list">${tradesHTML}</div>
   </div>`;
 }
@@ -950,5 +1007,7 @@ function renderPortfolio(priceData) {
     ${positionsHTML}
     <div class="section-title" style="margin-top:1.5rem">Registrar nueva compra</div>
     ${renderAddTradeFormHTML()}
+    <div class="section-title" style="margin-top:1.5rem">Registrar saldo inicial</div>
+    ${renderAddInitialBalanceFormHTML()}
   `;
 }
