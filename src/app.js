@@ -145,6 +145,7 @@ async function addAsset() {
   msgEl.style.color = 'var(--text-secondary)';
 
   watchlist.push({ ...asset });
+  saveWatchlist();
   await loadSingleAsset(asset);
   fundamentalData[asset.id] = (asset.type === 'stock' || asset.type === 'bond')
     ? getStockFundamentals(asset.id)
@@ -162,6 +163,7 @@ async function addAsset() {
 
 function removeAsset(index) {
   const removed = watchlist.splice(index, 1)[0];
+  saveWatchlist();
   delete priceData[removed.id];
   delete fundamentalData[removed.id];
   if (selectedAssetId === removed.id) {
@@ -388,6 +390,7 @@ async function submitTrade() {
 
   if (!watchlist.find(w => w.id === asset.id)) {
     watchlist.push({ ...asset });
+    saveWatchlist();
     await loadSingleAsset(asset);
     const fData = (asset.type === 'stock' || asset.type === 'bond')
       ? getStockFundamentals(asset.id)
@@ -410,6 +413,7 @@ async function addAssetToWatchlistFromPortfolio(assetId) {
   const asset = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
   if (!asset || watchlist.find(w => w.id === assetId)) return;
   watchlist.push({ ...asset });
+  saveWatchlist();
   await loadSingleAsset(asset);
   const fData = (asset.type === 'stock' || asset.type === 'bond')
     ? getStockFundamentals(asset.id)
@@ -465,6 +469,21 @@ document.getElementById('new-ticker').addEventListener('keydown', e => {
   if (e.key === 'Enter') addAsset();
 });
 
+// ─── Watchlist persistence ────────────────────────────────────────────
+
+function saveWatchlist() {
+  dbSaveWatchlist(watchlist.map(a => a.id));
+}
+
+async function syncWatchlistFromCloud() {
+  const ids = await dbLoadWatchlist();
+  if (!ids || !ids.length) return;
+  watchlist = ids
+    .map(id => Object.values(KNOWN_ASSETS).find(a => a.id === id))
+    .filter(Boolean)
+    .map(a => ({ ...a }));
+}
+
 // ─── Bootstrap ───────────────────────────────────────────────────────
 
 async function syncPortfolioAssets() {
@@ -493,6 +512,7 @@ async function syncPortfolioAssets() {
   appEl.style.display  = 'flex';
   authEl.style.display = 'none';
 
+  await syncWatchlistFromCloud();
   await syncPortfolioAssets();
   await loadAll();
   renderAssetList(watchlist, priceData);

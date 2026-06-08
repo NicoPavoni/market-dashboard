@@ -38,3 +38,37 @@ async function dbSaveTrades(trades) {
 function dbIsConfigured() {
   return !!firebase.auth().currentUser;
 }
+
+// ─── Watchlist storage ────────────────────────────────────────────────────────
+
+function _dbWatchlistRef() {
+  const uid = firebase.auth().currentUser?.uid;
+  if (!uid) return null;
+  return firebase.database().ref(`/watchlists/${uid}`);
+}
+
+async function dbLoadWatchlist() {
+  const ref = _dbWatchlistRef();
+  if (!ref) return null;
+  try {
+    const snap = await ref.get();
+    if (!snap.exists()) return null;
+    const val = snap.val();
+    return Array.isArray(val) ? val : Object.values(val || {});
+  } catch (e) {
+    console.warn('[db] watchlist load failed:', e.message);
+    return null;
+  }
+}
+
+async function dbSaveWatchlist(ids) {
+  const ref = _dbWatchlistRef();
+  if (!ref) return false;
+  try {
+    await ref.set(ids);
+    return true;
+  } catch (e) {
+    console.warn('[db] watchlist save failed:', e.message);
+    return false;
+  }
+}
