@@ -834,11 +834,74 @@ function renderAddInitialBalanceFormHTML() {
   </div>`;
 }
 
+function renderTradeEditForm(t) {
+  const baseFields = `
+    <div class="trade-edit-group">
+      <label>Fecha</label>
+      <input type="date" id="tedit-date-${t.id}" value="${t.date}" class="add-input" />
+    </div>
+    <div class="trade-edit-group">
+      <label>Total USD</label>
+      <input type="number" id="tedit-usd-${t.id}" value="${t.usdInvested.toFixed(2)}"
+        min="0" step="0.01" class="add-input"
+        ${t.isInitial ? '' : `oninput="syncTradeEditFields('${t.id}','usd')"`} />
+    </div>`;
+
+  const tradeFields = t.isInitial ? '' : `
+    <div class="trade-edit-group">
+      <label>Precio USD/u</label>
+      <input type="number" id="tedit-price-${t.id}" value="${t.priceUsd.toFixed(4)}"
+        min="0" step="any" class="add-input"
+        oninput="syncTradeEditFields('${t.id}','price')" />
+    </div>
+    <div class="trade-edit-group">
+      <label>Cantidad</label>
+      <input type="number" id="tedit-qty-${t.id}" value="${t.quantity.toFixed(6)}"
+        min="0" step="any" class="add-input"
+        oninput="syncTradeEditFields('${t.id}','qty')" />
+    </div>`;
+
+  return `<div class="trade-edit-wrap" data-trade="${t.id}">
+    <div class="trade-edit-fields">${baseFields}${tradeFields}</div>
+    <div class="trade-edit-actions">
+      <button class="btn-primary btn-sm" onclick="saveTradeEdit('${t.id}')">
+        <i class="ti ti-check" aria-hidden="true"></i> Guardar
+      </button>
+      <button class="btn-ghost btn-sm" onclick="cancelTradeEdit()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+const expandedPositions = new Set();
+
+function togglePosition(assetId) {
+  const card   = document.querySelector(`.position-card[data-asset="${assetId}"]`);
+  if (!card) return;
+  const body    = card.querySelector('.position-body');
+  const chevron = card.querySelector('.pos-chevron');
+  if (expandedPositions.has(assetId)) {
+    expandedPositions.delete(assetId);
+    body.style.display       = 'none';
+    chevron.style.transform  = 'rotate(0deg)';
+  } else {
+    expandedPositions.add(assetId);
+    body.style.display       = '';
+    chevron.style.transform  = 'rotate(180deg)';
+  }
+}
+
 function renderPositionCard(pos) {
-  const pnlSign = pos.pnlUsd >= 0 ? '+' : '';
-  const pnlCls  = pos.pnlUsd >= 0 ? 'green' : 'red';
-  const pnlBarW = Math.min(100, Math.abs(pos.pnlPct) * 2);
+  const hasInitial = pos.trades.some(t => t.isInitial);
+  const pnlSign  = pos.pnlUsd >= 0 ? '+' : '';
+  const pnlCls   = pos.hasNewTrades ? (pos.pnlUsd >= 0 ? 'green' : 'red') : '';
+  const pnlBarW  = pos.hasNewTrades ? Math.min(100, Math.abs(pos.pnlPct) * 2) : 0;
   const barColor = pos.pnlUsd >= 0 ? 'var(--green)' : 'var(--red)';
+  const isExpanded = expandedPositions.has(pos.assetId);
+
+  const pnlHeaderHtml = pos.hasNewTrades
+    ? `<div class="position-pnl-val ${pnlCls}">${pnlSign}${formatUsd(pos.pnlUsd)}</div>
+       <div class="position-pnl-pct ${pnlCls}">${pnlSign}${pos.pnlPct.toFixed(2)}%</div>`
+    : `<div class="pnl-initial-only">Solo saldo inicial</div>`;
 
   const noPriceWarning = !pos.hasPrice
     ? `<div class="pos-no-price">
@@ -849,13 +912,16 @@ function renderPositionCard(pos) {
 
   const tradesHTML = pos.trades.map(t => {
     if (t.isInitial) {
-      return `<div class="trade-row">
+      return `<div class="trade-row" data-trade="${t.id}">
         <div class="trade-row-left">
           <span class="trade-date">${formatTradeDate(t.date)}</span>
           <span class="trade-detail"><span class="badge-initial">Saldo inicial</span></span>
         </div>
         <div class="trade-row-right">
           <span class="trade-usd">${formatUsd(t.usdInvested)}</span>
+          <button class="btn-edit" onclick="openTradeEdit('${t.id}')" aria-label="Editar saldo inicial">
+            <i class="ti ti-pencil" aria-hidden="true"></i>
+          </button>
           <button class="btn-remove" onclick="deleteTrade('${t.id}')" aria-label="Eliminar saldo inicial">
             <i class="ti ti-trash" aria-hidden="true"></i>
           </button>
@@ -865,7 +931,7 @@ function renderPositionCard(pos) {
     const arsStr = t.arsAmount
       ? `$${t.arsAmount.toLocaleString('es-AR')} ARS (1 USD = $${t.arsUsdRate.toLocaleString('es-AR')})`
       : '';
-    return `<div class="trade-row">
+    return `<div class="trade-row" data-trade="${t.id}">
       <div class="trade-row-left">
         <span class="trade-date">${formatTradeDate(t.date)}</span>
         <span class="trade-detail">
@@ -875,6 +941,9 @@ function renderPositionCard(pos) {
       </div>
       <div class="trade-row-right">
         <span class="trade-usd">${formatUsd(t.usdInvested)}</span>
+        <button class="btn-edit" onclick="openTradeEdit('${t.id}')" aria-label="Editar compra">
+          <i class="ti ti-pencil" aria-hidden="true"></i>
+        </button>
         <button class="btn-remove" onclick="deleteTrade('${t.id}')" aria-label="Eliminar compra">
           <i class="ti ti-trash" aria-hidden="true"></i>
         </button>
@@ -882,45 +951,47 @@ function renderPositionCard(pos) {
     </div>`;
   }).join('');
 
-  return `<div class="position-card">
-    <div class="position-header">
+  return `<div class="position-card" data-asset="${pos.assetId}">
+    <div class="position-header position-header--toggle" onclick="togglePosition('${pos.assetId}')">
       <div class="position-info">
         <div class="position-name">${pos.assetName} <span class="position-ticker">${pos.ticker}</span></div>
         <div class="position-qty">${pos.totalQuantity.toFixed(6)} ${pos.ticker} en total</div>
       </div>
-      <div class="position-pnl">
-        <div class="position-pnl-val ${pnlCls}">${pnlSign}${formatUsd(pos.pnlUsd)}</div>
-        <div class="position-pnl-pct ${pnlCls}">${pnlSign}${pos.pnlPct.toFixed(2)}%</div>
+      <div class="position-header-right">
+        <div class="position-pnl">${pnlHeaderHtml}</div>
+        <i class="ti ti-chevron-down pos-chevron" style="transform:rotate(${isExpanded ? '180' : '0'}deg)" aria-hidden="true"></i>
       </div>
     </div>
 
-    ${noPriceWarning}
+    <div class="position-body" style="${isExpanded ? '' : 'display:none'}">
+      ${noPriceWarning}
 
-    <div class="position-stats">
-      <div class="pos-stat">
-        <div class="pos-stat-label">Precio prom. compra</div>
-        <div class="pos-stat-val">${formatPrice(pos.avgBuyPrice)}</div>
+      <div class="position-stats">
+        <div class="pos-stat">
+          <div class="pos-stat-label">Precio prom. compra</div>
+          <div class="pos-stat-val">${pos.hasNewTrades ? formatPrice(pos.avgBuyPrice) : '—'}</div>
+        </div>
+        <div class="pos-stat">
+          <div class="pos-stat-label">Precio actual</div>
+          <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatPrice(pos.currentPrice) : '—'}</div>
+        </div>
+        <div class="pos-stat">
+          <div class="pos-stat-label">${pos.hasNewTrades && hasInitial ? 'Invertido <span class="stat-note">(excl. saldo ini.)</span>' : 'Invertido'}</div>
+          <div class="pos-stat-val">${pos.hasNewTrades ? formatUsd(pos.pnlInvested) + ' USD' : formatUsd(pos.totalUsdInvested) + ' USD'}</div>
+        </div>
+        <div class="pos-stat">
+          <div class="pos-stat-label">${pos.hasNewTrades ? 'Valor actual' : 'Valor actual (total)'}</div>
+          <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatUsd(pos.hasNewTrades ? pos.pnlCurrVal : pos.currentValue) + ' USD' : '—'}</div>
+        </div>
       </div>
-      <div class="pos-stat">
-        <div class="pos-stat-label">Precio actual</div>
-        <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatPrice(pos.currentPrice) : '—'}</div>
+
+      <div class="pnl-bar-track">
+        <div class="pnl-bar-fill" style="width:${pnlBarW}%; background:${barColor}"></div>
       </div>
-      <div class="pos-stat">
-        <div class="pos-stat-label">Invertido</div>
-        <div class="pos-stat-val">${formatUsd(pos.totalUsdInvested)} USD</div>
-      </div>
-      <div class="pos-stat">
-        <div class="pos-stat-label">Valor actual</div>
-        <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatUsd(pos.currentValue) + ' USD' : '—'}</div>
-      </div>
+
+      <div class="trade-list-label">Movimientos registrados</div>
+      <div class="trade-list">${tradesHTML}</div>
     </div>
-
-    <div class="pnl-bar-track">
-      <div class="pnl-bar-fill" style="width:${pnlBarW}%; background:${barColor}"></div>
-    </div>
-
-    <div class="trade-list-label">Movimientos registrados</div>
-    <div class="trade-list">${tradesHTML}</div>
   </div>`;
 }
 
@@ -940,20 +1011,27 @@ function renderPortfolioOverview(pf) {
   const breakdownRows = typeOrder
     .filter(t => pf.byType[t])
     .map(t => {
-      const d       = pf.byType[t];
-      const pnl     = d.value - d.invested;
-      const pnlPct  = d.invested > 0 ? (pnl / d.invested) * 100 : 0;
+      const d    = pf.byType[t];
+      const meta = TYPE_META[t] || { label: t, icon: 'ti-circle' };
+      // If the category has real (non-initial) trades, show P&L; otherwise show holdings
+      const hasNew = d.invested > 0;
+      const displayInvested = hasNew ? d.invested  : d.totalHeld;
+      const displayValue    = hasNew ? d.value      : d.totalHeld;
+      const pnl     = hasNew ? d.value - d.invested : 0;
+      const pnlPct  = hasNew && d.invested > 0 ? (pnl / d.invested) * 100 : 0;
       const sign    = pnl >= 0 ? '+' : '';
       const cls     = pnl >= 0 ? 'green' : 'red';
-      const meta    = TYPE_META[t] || { label: t, icon: 'ti-circle' };
+      const pnlStr  = hasNew
+        ? `<span class="pf-type-pnl ${cls}">${sign}${formatUsd(pnl)} (${sign}${pnlPct.toFixed(1)}%)</span>`
+        : `<span class="pf-type-pnl muted">solo saldo inicial</span>`;
       return `
         <div class="pf-type-row">
           <span class="pf-type-icon"><i class="ti ${meta.icon}" aria-hidden="true"></i></span>
           <span class="pf-type-name">${meta.label}</span>
-          <span class="pf-type-invested">${formatUsd(d.invested)}</span>
+          <span class="pf-type-invested">${formatUsd(displayInvested)}</span>
           <span class="pf-type-arrow"><i class="ti ti-arrow-right" aria-hidden="true"></i></span>
-          <span class="pf-type-value">${formatUsd(d.value)}</span>
-          <span class="pf-type-pnl ${cls}">${sign}${formatUsd(pnl)} (${sign}${pnlPct.toFixed(1)}%)</span>
+          <span class="pf-type-value">${formatUsd(displayValue)}</span>
+          ${pnlStr}
         </div>`;
     }).join('');
 

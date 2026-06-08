@@ -604,7 +604,8 @@ select {
 }
 .config-item-name { font-weight: 500; font-size: 13px; }
 .config-item-meta { color: var(--text-secondary); font-size: 12px; }
-.btn-remove {
+.btn-remove,
+.btn-edit {
   background: none;
   border: none;
   cursor: pointer;
@@ -614,7 +615,50 @@ select {
   border-radius: var(--radius-sm);
   transition: all 0.15s;
 }
-.btn-remove:hover { color: var(--red); background: #FCEBEB; }
+.btn-remove:hover { color: var(--red);  background: #FCEBEB; }
+.btn-edit:hover   { color: var(--blue); background: #EBF1FC; }
+
+.trade-edit-wrap {
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.trade-edit-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.trade-edit-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 110px;
+  flex: 1;
+}
+.trade-edit-group label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+.trade-edit-group .add-input { padding: 5px 8px; font-size: 12px; }
+.trade-edit-actions { display: flex; gap: 6px; align-items: center; }
+.btn-sm { font-size: 12px !important; padding: 5px 12px !important; }
+.btn-ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.btn-ghost:hover { background: var(--bg); color: var(--text); }
 
 /* ── Help panel ── */
 .help-intro {
@@ -785,13 +829,26 @@ select {
   margin-bottom: 14px;
   gap: 10px;
 }
+.position-header--toggle {
+  cursor: pointer;
+  margin-bottom: 0;
+  padding-bottom: 14px;
+  border-radius: 4px;
+  user-select: none;
+}
+.position-header--toggle:hover { background: var(--bg-secondary); margin: -6px; padding: 6px 6px 14px; }
+.position-header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.pos-chevron { font-size: 18px; color: var(--text-secondary); transition: transform 0.2s ease; flex-shrink: 0; }
+.position-body { margin-top: 14px; }
 .position-name   { font-size: 15px; font-weight: 700; }
 .position-ticker { font-weight: 400; color: var(--text-secondary); font-size: 14px; }
 .position-qty    { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
 
-.position-pnl     { text-align: right; flex-shrink: 0; }
+.position-pnl     { text-align: right; }
 .position-pnl-val { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
 .position-pnl-pct { font-size: 13px; font-weight: 500; margin-top: 2px; }
+.pnl-initial-only { font-size: 11px; color: var(--text-secondary); text-align: right; line-height: 1.4; }
+.stat-note        { font-size: 10px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
 
 .pos-no-price {
   display: flex;

@@ -38,67 +38,89 @@ function removeTrade(id) {
   return trades;
 }
 
+function updateTrade(id, updates) {
+  const trades = loadTrades().map(t => t.id === id ? { ...t, ...updates } : t);
+  saveTrades(trades);
+  return trades;
+}
+
 function computePortfolio(priceData) {
   const trades = loadTrades();
 
   const positions = {};
   let totalUsdInvested  = 0;
   let totalCurrentValue = 0;
+  // P&L totals exclude initial-balance entries
+  let totalPnlInvested  = 0;
+  let totalPnlCurrVal   = 0;
 
   trades.forEach(t => {
     if (!positions[t.assetId]) {
       positions[t.assetId] = {
-        assetId:         t.assetId,
-        ticker:          t.ticker,
-        assetName:       t.assetName,
-        assetType:       t.assetType,
-        trades:          [],
+        assetId:          t.assetId,
+        ticker:           t.ticker,
+        assetName:        t.assetName,
+        assetType:        t.assetType,
+        trades:           [],
         totalUsdInvested: 0,
         totalArsInvested: 0,
-        totalQuantity:   0,
+        totalQuantity:    0,
+        pnlInvested:      0,  // non-initial trades only
+        pnlQuantity:      0,  // non-initial trades only
       };
     }
     const pos = positions[t.assetId];
     pos.trades.push(t);
-    pos.totalUsdInvested  += t.usdInvested;
-    pos.totalArsInvested  += t.arsAmount;
-    pos.totalQuantity     += t.quantity;
-    totalUsdInvested      += t.usdInvested;
+    pos.totalUsdInvested += t.usdInvested;
+    pos.totalArsInvested += t.arsAmount;
+    pos.totalQuantity    += t.quantity;
+    totalUsdInvested     += t.usdInvested;
+    if (!t.isInitial) {
+      pos.pnlInvested += t.usdInvested;
+      pos.pnlQuantity += t.quantity;
+    }
   });
 
   Object.values(positions).forEach(pos => {
     const currentPrice = priceData[pos.assetId]?.current ?? 0;
     const currentValue = pos.totalQuantity * currentPrice;
-    const pnlUsd       = currentValue - pos.totalUsdInvested;
-    const pnlPct       = pos.totalUsdInvested > 0
-      ? (pnlUsd / pos.totalUsdInvested) * 100
+    const pnlCurrVal   = pos.pnlQuantity  * currentPrice;
+    const pnlUsd       = pos.pnlInvested > 0 ? pnlCurrVal - pos.pnlInvested : 0;
+    const pnlPct       = pos.pnlInvested > 0
+      ? (pnlUsd / pos.pnlInvested) * 100
       : 0;
-    const avgBuyPrice  = pos.totalQuantity > 0
-      ? pos.totalUsdInvested / pos.totalQuantity
+    const avgBuyPrice  = pos.pnlQuantity > 0
+      ? pos.pnlInvested / pos.pnlQuantity
       : 0;
 
     pos.currentPrice  = currentPrice;
     pos.currentValue  = currentValue;
+    pos.pnlCurrVal    = pnlCurrVal;
     pos.pnlUsd        = pnlUsd;
     pos.pnlPct        = pnlPct;
     pos.avgBuyPrice   = avgBuyPrice;
     pos.hasPrice      = currentPrice > 0;
+    pos.hasNewTrades  = pos.pnlInvested > 0;
 
     totalCurrentValue += currentValue;
+    totalPnlInvested  += pos.pnlInvested;
+    totalPnlCurrVal   += pnlCurrVal;
   });
 
-  const totalPnlUsd = totalCurrentValue - totalUsdInvested;
-  const totalPnlPct = totalUsdInvested > 0
-    ? (totalPnlUsd / totalUsdInvested) * 100
+  // Overview P&L is also based on non-initial trades only
+  const totalPnlUsd = totalPnlInvested > 0 ? totalPnlCurrVal - totalPnlInvested : 0;
+  const totalPnlPct = totalPnlInvested > 0
+    ? (totalPnlUsd / totalPnlInvested) * 100
     : 0;
 
-  // Aggregate totals per asset type (crypto / stock / bond)
+  // Category breakdown uses non-initial for P&L, but tracks all held value too
   const byType = {};
   Object.values(positions).forEach(pos => {
     const t = pos.assetType || 'other';
-    if (!byType[t]) byType[t] = { invested: 0, value: 0 };
-    byType[t].invested += pos.totalUsdInvested;
-    byType[t].value    += pos.currentValue;
+    if (!byType[t]) byType[t] = { invested: 0, value: 0, totalHeld: 0 };
+    byType[t].invested  += pos.pnlInvested;
+    byType[t].value     += pos.pnlCurrVal;
+    byType[t].totalHeld += pos.currentValue;
   });
 
   return {

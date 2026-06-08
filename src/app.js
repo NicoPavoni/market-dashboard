@@ -463,6 +463,62 @@ async function doAuthChangePassword() {
   }
 }
 
+// ─── Trade editing ───────────────────────────────────────────────────
+
+function openTradeEdit(id) {
+  const t = loadTrades().find(x => x.id === id);
+  if (!t) return;
+  const row = document.querySelector(`.trade-row[data-trade="${id}"]`);
+  if (!row) return;
+  row.outerHTML = renderTradeEditForm(t);
+}
+
+function syncTradeEditFields(id, changed) {
+  const usdEl   = document.getElementById(`tedit-usd-${id}`);
+  const priceEl = document.getElementById(`tedit-price-${id}`);
+  const qtyEl   = document.getElementById(`tedit-qty-${id}`);
+  if (!usdEl || !priceEl || !qtyEl) return;
+  const usd   = parseFloat(usdEl.value)   || 0;
+  const price = parseFloat(priceEl.value) || 0;
+  const qty   = parseFloat(qtyEl.value)   || 0;
+  if      (changed === 'usd'   && price > 0) qtyEl.value   = (usd / price).toFixed(6);
+  else if (changed === 'price' && usd   > 0) qtyEl.value   = (usd / price).toFixed(6);
+  else if (changed === 'qty'   && price > 0) usdEl.value   = (qty * price).toFixed(2);
+}
+
+function saveTradeEdit(id) {
+  const t = loadTrades().find(x => x.id === id);
+  if (!t) return;
+
+  const newDate = document.getElementById(`tedit-date-${id}`)?.value || t.date;
+  const newUsd  = parseFloat(document.getElementById(`tedit-usd-${id}`)?.value);
+
+  const updates = {
+    date:        newDate,
+    usdInvested: isNaN(newUsd) || newUsd <= 0 ? t.usdInvested : newUsd,
+  };
+
+  if (t.isInitial) {
+    const price = priceData[t.assetId]?.current || t.priceUsd || 1;
+    updates.priceUsd = price;
+    updates.quantity = updates.usdInvested / price;
+  } else {
+    const newPrice = parseFloat(document.getElementById(`tedit-price-${id}`)?.value);
+    const newQty   = parseFloat(document.getElementById(`tedit-qty-${id}`)?.value);
+    if (!isNaN(newPrice) && newPrice > 0) updates.priceUsd = newPrice;
+    if (!isNaN(newQty)   && newQty   > 0) updates.quantity = newQty;
+    // ensure internal consistency: usd = qty * price
+    updates.usdInvested = (updates.quantity ?? t.quantity) * (updates.priceUsd ?? t.priceUsd);
+  }
+
+  updateTrade(id, updates);
+  renderPortfolio(priceData);
+}
+
+function cancelTradeEdit() {
+  renderPortfolio(priceData);
+}
+
 // ─── Keyboard shortcut ────────────────────────────────────────────────
 
 document.getElementById('new-ticker').addEventListener('keydown', e => {
