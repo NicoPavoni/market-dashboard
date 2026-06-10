@@ -4,6 +4,11 @@ let priceData       = {};
 let fundamentalData = {};
 let macroData       = null;
 let refreshTimer    = null;
+let arsRates        = null;
+let equityRangeCurrent = '30d';
+
+const NOTIF_KEY = 'mktdash_notif_v1';
+const NOTIF_MS  = 4 * 60 * 60 * 1000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -86,13 +91,25 @@ function refreshAll() {
     const riesgoTab = document.getElementById('tab-riesgo');
     if (macroTab  && macroTab.style.display  !== 'none') renderMacroPanel(macroData);
     if (riesgoTab && riesgoTab.style.display !== 'none') renderRiskPanel(watchlist, priceData, fundamentalData, macroData);
+
+    const pf = computePortfolio(priceData);
+    recordPfSnapshot(pf);
+    checkAndNotifyAlerts();
+
+    const pfTab = document.getElementById('tab-portafolio');
+    if (pfTab && pfTab.style.display !== 'none') {
+      renderEquityCurveChart(loadPfHistory(), equityRangeCurrent);
+    }
   });
 }
 
 function switchTab(tab) {
   switchTabUI(tab);
   if (tab === 'alertas')    renderAlerts(watchlist, priceData);
-  if (tab === 'config')     renderConfigList(watchlist, removeAsset.toString());
+  if (tab === 'config') {
+    renderConfigList(watchlist, removeAsset.toString());
+    renderNotificationsInConfig();
+  }
   if (tab === 'macro')      renderMacroPanel(macroData);
   if (tab === 'riesgo')     renderRiskPanel(watchlist, priceData, fundamentalData, macroData);
   if (tab === 'ayuda')      renderHelpPanel();
@@ -641,6 +658,102 @@ async function syncWatchlistFromCloud() {
     .map(a => ({ ...a }));
 }
 
+// ─── ARS/USD exchange rate (bluelytics) ──────────────────────────────
+
+async function loadArsRates() {
+  try {
+    const r = await fetch('https://api.bluelytics.com.ar/v2/latest');
+    if (!r.ok) return;
+    const data = await r.json();
+    arsRates = { blue: data.blue?.value_sell ?? null };
+  } catch (e) {
+    console.warn('[ars] rate fetch failed:', e.message);
+  }
+}
+
+// ─── Push notifications ───────────────────────────────────────────────
+
+function _notifLog() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function checkAndNotifyAlerts() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const threshold = getRsiThreshold();
+  const log = _notifLog();
+  const now = Date.now();
+
+  watchlist.forEach(a => {
+    const d = priceData[a.id];
+    if (!d) return;
+    if (now - (log[a.id] || 0) < NOTIF_MS) return;
+
+    const sig = d.compositeSignal || d.signal;
+    let title = null, body = null;
+
+    if (sig === 'buy') {
+      title = `Señal de compra: ${a.ticker}`;
+      body  = `Score ≥68 · RSI ${d.rsi} · ${formatPrice(d.current)}`;
+    } else if (d.rsi <= threshold) {
+      title = `RSI sobrevendido: ${a.ticker}`;
+      body  = `RSI en ${d.rsi} (umbral ≤${threshold}) · ${formatPrice(d.current)}`;
+    } else if (d.rsi >= 75) {
+      title = `RSI sobrecomprado: ${a.ticker}`;
+      body  = `RSI en ${d.rsi} (≥75) · ${formatPrice(d.current)}`;
+    }
+
+    if (title) {
+      log[a.id] = now;
+      try { new Notification(title, { body }); } catch (e) {}
+    }
+  });
+
+  localStorage.setItem(NOTIF_KEY, JSON.stringify(log));
+}
+
+function initNotifications() {
+  renderNotificationsInConfig();
+}
+
+function renderNotificationsInConfig() {
+  const el = document.getElementById('config-notifications');
+  if (!el) return;
+  el.innerHTML = renderNotificationsSection();
+}
+
+async function requestNotifications() {
+  if (!('Notification' in window)) return;
+  await Notification.requestPermission();
+  renderNotificationsInConfig();
+  if (Notification.permission === 'granted') {
+    try { new Notification('Market Panel', { body: 'Notificaciones activadas correctamente.' }); } catch (e) {}
+  }
+}
+
+// ─── Equity curve range ───────────────────────────────────────────────
+
+function setEquityRange(range) {
+  equityRangeCurrent = range;
+  document.querySelectorAll('.equity-range-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.range === range);
+  });
+  renderEquityCurveChart(loadPfHistory(), range);
+}
+
+// ─── Portfolio history cloud sync ─────────────────────────────────────
+
+async function syncPfHistoryFromCloud() {
+  if (!dbIsConfigured()) return;
+  const cloud = await dbLoadPfHistory();
+  if (!cloud || !cloud.length) return;
+  const local = loadPfHistory();
+  const merged = Object.values(
+    [...local, ...cloud].reduce((acc, h) => { acc[h.date] = h; return acc; }, {})
+  ).sort((a, b) => a.date.localeCompare(b.date)).slice(-365);
+  savePfHistory(merged);
+}
+
 // ─── Bootstrap ───────────────────────────────────────────────────────
 
 async function syncPortfolioAssets() {
@@ -674,9 +787,16 @@ async function syncPortfolioAssets() {
   const cloudSynced = await syncTradesFromCloud();
   seedInitialBalancesPreload();
   await syncPortfolioAssets();
-  await loadAll();
+  await Promise.all([loadAll(), loadArsRates()]);
   await seedInitialBalances();
+  await syncPfHistoryFromCloud();
+
+  // Record today's snapshot
+  const pfSnap = computePortfolio(priceData);
+  recordPfSnapshot(pfSnap);
+
   renderAssetList(watchlist, priceData);
+  initNotifications();
 
   if (watchlist.length > 0) selectAsset(watchlist[0].id);
 

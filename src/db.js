@@ -72,3 +72,37 @@ async function dbSaveWatchlist(ids) {
     return false;
   }
 }
+
+// ─── Portfolio history storage ────────────────────────────────────────────────
+
+function _dbHistoryRef() {
+  const uid = firebase.auth().currentUser?.uid;
+  if (!uid) return null;
+  return firebase.database().ref(`/history/${uid}`);
+}
+
+async function dbLoadPfHistory() {
+  const ref = _dbHistoryRef();
+  if (!ref) return null;
+  try {
+    const snap = await ref.get();
+    if (!snap.exists()) return [];
+    const val = snap.val();
+    return Array.isArray(val) ? val : Object.values(val || {});
+  } catch (e) {
+    console.warn('[db] history load failed:', e.message);
+    return null;
+  }
+}
+
+async function dbSavePfHistory(history) {
+  const ref = _dbHistoryRef();
+  if (!ref) return false;
+  try {
+    await ref.set(history);
+    return true;
+  } catch (e) {
+    console.warn('[db] history save failed:', e.message);
+    return false;
+  }
+}

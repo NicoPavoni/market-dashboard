@@ -1,5 +1,6 @@
-let priceChart = null;
-let currentTF  = '7d';
+let priceChart  = null;
+let equityChart = null;
+let currentTF   = '7d';
 let selectedAssetId = null;
 
 // ─────────────────────────────────────────────
@@ -692,6 +693,13 @@ function renderAddTradeFormHTML() {
     .join('');
 
   const today = new Date().toISOString().split('T')[0];
+  const blueRate = (typeof arsRates !== 'undefined' && arsRates?.blue)
+    ? Math.round(arsRates.blue)
+    : null;
+  const rateDefault = blueRate || 1200;
+  const rateBadge = blueRate
+    ? `<span class="ars-rate-badge"><i class="ti ti-refresh" style="font-size:10px;vertical-align:middle"></i> Dólar blue: $${blueRate.toLocaleString('es-AR')}</span>`
+    : '';
 
   return `<div class="add-trade-card">
 
@@ -740,11 +748,11 @@ function renderAddTradeFormHTML() {
       </div>
       <div class="form-group">
         <label class="config-label">
-          Tipo de cambio ARS/USD
+          Tipo de cambio ARS/USD ${rateBadge}
           <span class="form-hint">dólar MEP/CCL/cripto</span>
         </label>
         <input type="number" class="add-input" id="trade-rate"
-          placeholder="1200" value="1200" min="1" oninput="updateTradeCalc()" />
+          placeholder="${rateDefault}" value="${rateDefault}" min="1" oninput="updateTradeCalc()" />
       </div>
       <div class="form-group">
         <label class="config-label">
@@ -1064,13 +1072,175 @@ function renderPortfolioOverview(pf) {
     </div>`;
 }
 
+// ─────────────────────────────────────────────
+// Equity curve (portfolio value over time)
+// ─────────────────────────────────────────────
+
+function renderEquityCurve(hasData, range) {
+  const rangeButtons = ['30d', '90d', '1y'].map(r => {
+    const label = r === '1y' ? '1A' : r.toUpperCase();
+    const cls   = r === range ? ' active' : '';
+    return `<button class="equity-range-btn${cls}" data-range="${r}" onclick="setEquityRange('${r}')">${label}</button>`;
+  }).join('');
+
+  const chartArea = hasData
+    ? `<div style="position:relative;width:100%;height:180px;margin-top:12px;">
+        <canvas id="equity-chart" role="img" aria-label="Curva de valor del portafolio"></canvas>
+       </div>`
+    : `<div class="equity-empty">
+        <i class="ti ti-chart-line" aria-hidden="true"></i>
+        La curva se construye con el tiempo. Cada vez que abras el panel se guarda un punto. Volvé mañana para ver el primer segmento.
+       </div>`;
+
+  return `<div class="equity-curve-card">
+    <div class="equity-curve-header">
+      <div class="section-title" style="margin:0">Evolución del portafolio</div>
+      <div class="equity-range-btns">${rangeButtons}</div>
+    </div>
+    ${chartArea}
+  </div>`;
+}
+
+function renderEquityCurveChart(history, range) {
+  const canvas = document.getElementById('equity-chart');
+  if (!canvas) return;
+
+  const days     = range === '90d' ? 90 : range === '1y' ? 365 : 30;
+  const filtered = history.slice(-days);
+
+  if (equityChart) { equityChart.destroy(); equityChart = null; }
+  if (!filtered.length) return;
+
+  const labels = filtered.map(h => {
+    const d = new Date(h.date + 'T12:00:00');
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  });
+
+  const isDark    = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+  const textColor = isDark ? '#777' : '#aaa';
+
+  equityChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Valor actual',
+          data:  filtered.map(h => h.value),
+          borderColor:     '#1D9E75',
+          backgroundColor: 'rgba(29,158,117,0.07)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          pointRadius:      filtered.length <= 14 ? 3 : 0,
+          pointHoverRadius: 4,
+        },
+        {
+          label: 'Capital invertido',
+          data:  filtered.map(h => h.invested),
+          borderColor:     '#185FA5',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: textColor, font: { size: 11 }, boxWidth: 12, padding: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${formatUsd(ctx.raw)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid:  { color: gridColor },
+          ticks: { color: textColor, maxTicksLimit: 6, font: { size: 10 } },
+          border:{ display: false },
+        },
+        y: {
+          grid:  { color: gridColor },
+          ticks: { color: textColor, font: { size: 10 }, callback: v => formatUsd(v) },
+          border:{ display: false },
+          position: 'right',
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────
+// Notifications section (config tab)
+// ─────────────────────────────────────────────
+
+function renderNotificationsSection() {
+  if (!('Notification' in window)) {
+    return `<div class="notif-box notif-unsupported">
+      <i class="ti ti-bell-off" aria-hidden="true"></i>
+      Tu navegador no soporta notificaciones push.
+    </div>`;
+  }
+
+  const perm = Notification.permission;
+
+  if (perm === 'granted') {
+    return `<div class="section-title">Notificaciones push</div>
+    <div class="notif-box notif-granted">
+      <div class="notif-status-row">
+        <span class="notif-dot notif-dot--on"></span>
+        <strong>Notificaciones activadas</strong>
+      </div>
+      <p class="notif-desc">Recibirás alertas del navegador cuando un activo genere señal de compra, RSI sobrevendido (≤umbral) o RSI sobrecomprado (≥75). Máximo 1 alerta por activo cada 4 horas.</p>
+    </div>`;
+  }
+
+  if (perm === 'denied') {
+    return `<div class="section-title">Notificaciones push</div>
+    <div class="notif-box notif-denied">
+      <div class="notif-status-row">
+        <span class="notif-dot notif-dot--off"></span>
+        <strong>Notificaciones bloqueadas</strong>
+      </div>
+      <p class="notif-desc">El navegador tiene las notificaciones bloqueadas para este sitio. Para activarlas, hacé clic en el ícono de candado en la barra de dirección → Permisos del sitio → Notificaciones → Permitir.</p>
+    </div>`;
+  }
+
+  return `<div class="section-title">Notificaciones push</div>
+  <div class="notif-box">
+    <div class="notif-status-row">
+      <span class="notif-dot"></span>
+      <strong>Alertas en tu computadora</strong>
+    </div>
+    <p class="notif-desc">Activá las notificaciones del navegador para recibir alertas en tiempo real cuando un activo genere una señal de compra o llegue a niveles extremos de RSI, incluso con el panel en segundo plano.</p>
+    <button class="btn-primary" onclick="requestNotifications()">
+      <i class="ti ti-bell" aria-hidden="true"></i> Activar notificaciones
+    </button>
+  </div>`;
+}
+
 function renderPortfolio(priceData) {
   const container = document.getElementById('portfolio-content');
   if (!container) return;
 
-  const pf = computePortfolio(priceData);
+  const pf      = computePortfolio(priceData);
+  const history = loadPfHistory();
+  const range   = typeof equityRangeCurrent !== 'undefined' ? equityRangeCurrent : '30d';
 
   const summaryHTML = renderPortfolioOverview(pf);
+  const equityHTML  = `<div style="margin-top:1rem">${renderEquityCurve(history.length > 0, range)}</div>`;
 
   const positionsHTML = pf.positions.length
     ? `<div class="section-title" style="margin-top:1.5rem">Mis posiciones</div>
@@ -1082,10 +1252,15 @@ function renderPortfolio(priceData) {
 
   container.innerHTML = `
     ${summaryHTML}
+    ${equityHTML}
     ${positionsHTML}
     <div class="section-title" style="margin-top:1.5rem">Registrar nueva compra</div>
     ${renderAddTradeFormHTML()}
     <div class="section-title" style="margin-top:1.5rem">Registrar saldo inicial</div>
     ${renderAddInitialBalanceFormHTML()}
   `;
+
+  if (history.length > 0) {
+    renderEquityCurveChart(history, range);
+  }
 }

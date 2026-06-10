@@ -134,6 +134,46 @@ function computePortfolio(priceData) {
   };
 }
 
+// ─── Portfolio history (equity curve) ────────────────────────────────────────
+
+const PF_HISTORY_KEY = 'mktdash_pfhist_v1';
+
+function loadPfHistory() {
+  try {
+    const raw = localStorage.getItem(PF_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePfHistory(history) {
+  localStorage.setItem(PF_HISTORY_KEY, JSON.stringify(history));
+  dbSavePfHistory(history);
+}
+
+function recordPfSnapshot(pf) {
+  if (!pf.totalCurrentValue && !pf.totalUsdInvested) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const history = loadPfHistory();
+  const idx = history.findIndex(h => h.date === today);
+  const snap = {
+    date:     today,
+    value:    pf.totalCurrentValue,
+    invested: pf.totalUsdInvested,
+  };
+  if (idx >= 0) {
+    history[idx] = snap;
+  } else {
+    history.push(snap);
+  }
+  const trimmed = history
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-365);
+  savePfHistory(trimmed);
+  return trimmed;
+}
+
 function getUniqueAssetOptions() {
   const typeOrder = { crypto: 0, stock: 1, bond: 2 };
   return Object.values(KNOWN_ASSETS)
