@@ -92,8 +92,10 @@ function renderAssetList(watchlist, priceData) {
 
     const typeLabel = a.type === 'crypto' ? 'Cripto' : a.type === 'bond' ? 'Bono' : 'Acción';
     const srcBadge  = d.simulated
-      ? '<span class="price-sim-badge" title="Precio simulado — Yahoo Finance no disponible">sim</span>'
-      : '';
+      ? '<span class="price-sim-badge" title="Precio simulado — data912 no disponible">sim</span>'
+      : d.noHistory
+        ? '<span class="price-sim-badge" title="Precio real sin historial — RSI y medias no disponibles">sin hist.</span>'
+        : '';
 
     return `<div class="asset-row${selCls}" onclick="selectAsset('${a.id}')">
       <div>
@@ -102,7 +104,7 @@ function renderAssetList(watchlist, priceData) {
       </div>
       <div class="asset-price">${formatPrice(d.current)}</div>
       <div class="asset-change ${chgCls}">${chgStr}</div>
-      <div class="asset-change ${rsiCls}" style="text-align:right">${d.rsi}</div>
+      <div class="asset-change ${rsiCls}" style="text-align:right">${d.noHistory ? '—' : d.rsi}</div>
       <div style="text-align:right">${signalBadgeHTML(sig)}</div>
     </div>`;
   }).join('');
@@ -509,7 +511,7 @@ function renderConfigList(watchlist, onRemove) {
     <div class="config-item">
       <div>
         <span class="config-item-name">${a.name}</span>
-        <span class="config-item-meta"> ${a.ticker} · ${a.type === 'crypto' ? 'Cripto' : 'Acción'}</span>
+        <span class="config-item-meta"> ${a.ticker} · ${assetKindLabel(a)}</span>
       </div>
       <button class="btn-remove" onclick="(${onRemove})(${i})" aria-label="Eliminar ${a.name}">
         <i class="ti ti-trash" aria-hidden="true"></i>
@@ -677,6 +679,23 @@ function formatUsd(n) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Portfolio amounts in the selected display currency (USD, or ARS at today's MEP)
+function formatMoney(usd) {
+  if (getPfCurrency() !== 'ars') return formatUsd(usd);
+  return 'AR$ ' + Math.round(usd * arsRates.mep).toLocaleString('es-AR');
+}
+
+// Same as formatMoney, with the currency spelled out for USD
+function formatMoneyLabeled(usd) {
+  return getPfCurrency() === 'ars' ? formatMoney(usd) : formatUsd(usd) + ' USD';
+}
+
+function formatMoneyPrice(usd) {
+  if (getPfCurrency() !== 'ars') return formatPrice(usd);
+  const ars = usd * arsRates.mep;
+  return 'AR$ ' + ars.toLocaleString('es-AR', { maximumFractionDigits: ars >= 1000 ? 0 : 2 });
+}
+
 function renderAddTradeFormHTML() {
   const assets = getUniqueAssetOptions();
   const cryptoOpts = assets
@@ -693,15 +712,25 @@ function renderAddTradeFormHTML() {
     .join('');
 
   const today = new Date().toISOString().split('T')[0];
-  const blueRate = (typeof arsRates !== 'undefined' && arsRates?.blue)
-    ? Math.round(arsRates.blue)
-    : null;
-  const rateDefault = blueRate || 1200;
-  const rateBadge = blueRate
-    ? `<span class="ars-rate-badge"><i class="ti ti-refresh" style="font-size:10px;vertical-align:middle"></i> Dólar blue: $${blueRate.toLocaleString('es-AR')}</span>`
+  // Default to MEP (the rate for CEDEARs / bonds), else blue
+  const mepRate  = arsRates?.mep  ? Math.round(arsRates.mep)  : null;
+  const blueRate = arsRates?.blue ? Math.round(arsRates.blue) : null;
+  const rateDefault = mepRate || blueRate || 1200;
+  const rateBadge = mepRate || blueRate
+    ? `<span class="ars-rate-badge"><i class="ti ti-refresh" style="font-size:10px;vertical-align:middle"></i> Dólar ${mepRate ? 'MEP' : 'blue'}: $${rateDefault.toLocaleString('es-AR')}</span>`
     : '';
 
   return `<div class="add-trade-card">
+
+    <!-- Buy / sell -->
+    <div class="trade-side-tabs">
+      <button class="trade-side-btn active" data-side="buy" onclick="setTradeSide('buy')">
+        <i class="ti ti-arrow-down-left" aria-hidden="true"></i> Compra
+      </button>
+      <button class="trade-side-btn" data-side="sell" onclick="setTradeSide('sell')">
+        <i class="ti ti-arrow-up-right" aria-hidden="true"></i> Venta
+      </button>
+    </div>
 
     <!-- Mode tabs -->
     <div class="trade-mode-tabs">
@@ -726,7 +755,7 @@ function renderAddTradeFormHTML() {
         </select>
       </div>
       <div class="form-group">
-        <label class="config-label">Fecha de compra</label>
+        <label class="config-label" id="trade-date-label">Fecha de compra</label>
         <input type="date" class="add-input" id="trade-date" value="${today}" />
       </div>
       <div class="form-group">
@@ -736,13 +765,14 @@ function renderAddTradeFormHTML() {
         </label>
         <input type="number" class="add-input" id="trade-qty"
           placeholder="0.01650022" min="0" step="any" oninput="updateTradeFromQty()" />
+        <div class="trade-held hidden" id="trade-held"></div>
       </div>
     </div>
 
     <!-- ARS mode fields -->
     <div class="trade-form-grid" id="trade-ars-fields">
       <div class="form-group">
-        <label class="config-label">Monto en pesos ARS $</label>
+        <label class="config-label" id="trade-ars-label">Monto en pesos ARS $</label>
         <input type="number" class="add-input" id="trade-ars"
           placeholder="200000" min="0" oninput="updateTradeCalc()" />
       </div>
@@ -756,7 +786,7 @@ function renderAddTradeFormHTML() {
       </div>
       <div class="form-group">
         <label class="config-label">
-          Precio de compra (USD)
+          <span id="trade-price-label">Precio de compra (USD)</span>
           <span class="form-hint">se completa automáticamente</span>
         </label>
         <input type="number" class="add-input" id="trade-price"
@@ -768,8 +798,8 @@ function renderAddTradeFormHTML() {
     <div class="trade-form-grid hidden" id="trade-usd-fields">
       <div class="form-group">
         <label class="config-label">
-          Total invertido (USD)
-          <span class="form-hint">costo base de tu posición</span>
+          <span id="trade-usd-label">Total invertido (USD)</span>
+          <span class="form-hint" id="trade-usd-hint">costo base de tu posición</span>
         </label>
         <input type="number" class="add-input" id="trade-usd-amount"
           placeholder="1036.65" min="0" step="any" oninput="updateTradeCalcUsd()" />
@@ -793,7 +823,7 @@ function renderAddTradeFormHTML() {
     </div>
 
     <div id="trade-msg" class="add-msg"></div>
-    <button class="btn-primary" onclick="submitTrade()">
+    <button class="btn-primary" id="trade-submit" onclick="submitTrade()">
       <i class="ti ti-plus" aria-hidden="true"></i> Registrar compra
     </button>
   </div>`;
@@ -906,12 +936,18 @@ function renderPositionCard(pos) {
   const barColor = pos.pnlUsd >= 0 ? 'var(--green)' : 'var(--red)';
   const isExpanded = expandedPositions.has(pos.assetId);
 
-  const pnlHeaderHtml = pos.hasNewTrades
-    ? `<div class="position-pnl-val ${pnlCls}">${pnlSign}${formatUsd(pos.pnlUsd)}</div>
+  const realSign = pos.realizedPnl >= 0 ? '+' : '';
+  const realCls  = pos.realizedPnl >= 0 ? 'green' : 'red';
+
+  const pnlHeaderHtml = pos.isClosed
+    ? `<div class="position-pnl-val ${realCls}">${realSign}${formatMoney(pos.realizedPnl)}</div>
+       <div class="position-pnl-pct muted">realizado</div>`
+    : pos.hasNewTrades
+    ? `<div class="position-pnl-val ${pnlCls}">${pnlSign}${formatMoney(pos.pnlUsd)}</div>
        <div class="position-pnl-pct ${pnlCls}">${pnlSign}${pos.pnlPct.toFixed(2)}%</div>`
     : `<div class="pnl-initial-only">Solo saldo inicial</div>`;
 
-  const noPriceWarning = !pos.hasPrice
+  const noPriceWarning = !pos.hasPrice && !pos.isClosed
     ? `<div class="pos-no-price">
         <i class="ti ti-alert-triangle" aria-hidden="true"></i>
         Este activo no está en tu watchlist. <button class="link-btn" onclick="addAssetToWatchlistFromPortfolio('${pos.assetId}')">Agregar</button> para ver el precio actual.
@@ -936,6 +972,8 @@ function renderPositionCard(pos) {
         </div>
       </div>`;
     }
+    const isSell = t.side === 'sell';
+    const kind   = isSell ? 'venta' : 'compra';
     const arsStr = t.arsAmount
       ? `$${t.arsAmount.toLocaleString('es-AR')} ARS (1 USD = $${t.arsUsdRate.toLocaleString('es-AR')})`
       : '';
@@ -943,16 +981,17 @@ function renderPositionCard(pos) {
       <div class="trade-row-left">
         <span class="trade-date">${formatTradeDate(t.date)}</span>
         <span class="trade-detail">
+          ${isSell ? '<span class="badge-sell">Venta</span> ' : ''}
           ${arsStr ? arsStr + ' · ' : ''}
           ${t.quantity.toFixed(6)} ${t.ticker} a ${formatUsd(t.priceUsd)}
         </span>
       </div>
       <div class="trade-row-right">
-        <span class="trade-usd">${formatUsd(t.usdInvested)}</span>
-        <button class="btn-edit" onclick="openTradeEdit('${t.id}')" aria-label="Editar compra">
+        <span class="trade-usd">${isSell ? '+' : ''}${formatUsd(t.usdInvested)}</span>
+        <button class="btn-edit" onclick="openTradeEdit('${t.id}')" aria-label="Editar ${kind}">
           <i class="ti ti-pencil" aria-hidden="true"></i>
         </button>
-        <button class="btn-remove" onclick="deleteTrade('${t.id}')" aria-label="Eliminar compra">
+        <button class="btn-remove" onclick="deleteTrade('${t.id}')" aria-label="Eliminar ${kind}">
           <i class="ti ti-trash" aria-hidden="true"></i>
         </button>
       </div>
@@ -963,7 +1002,9 @@ function renderPositionCard(pos) {
     <div class="position-header position-header--toggle" onclick="togglePosition('${pos.assetId}')">
       <div class="position-info">
         <div class="position-name">${pos.assetName} <span class="position-ticker">${pos.ticker}</span></div>
-        <div class="position-qty">${pos.totalQuantity.toFixed(6)} ${pos.ticker} en total</div>
+        <div class="position-qty">${pos.isClosed
+          ? '<span class="badge-closed">Posición cerrada</span>'
+          : `${pos.totalQuantity.toFixed(6)} ${pos.ticker} en total`}</div>
       </div>
       <div class="position-header-right">
         <div class="position-pnl">${pnlHeaderHtml}</div>
@@ -977,20 +1018,25 @@ function renderPositionCard(pos) {
       <div class="position-stats">
         <div class="pos-stat">
           <div class="pos-stat-label">Precio prom. compra</div>
-          <div class="pos-stat-val">${pos.hasNewTrades ? formatPrice(pos.avgBuyPrice) : '—'}</div>
+          <div class="pos-stat-val">${pos.hasNewTrades ? formatMoneyPrice(pos.avgBuyPrice) : '—'}</div>
         </div>
         <div class="pos-stat">
           <div class="pos-stat-label">Precio actual</div>
-          <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatPrice(pos.currentPrice) : '—'}</div>
+          <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatMoneyPrice(pos.currentPrice) : '—'}</div>
         </div>
         <div class="pos-stat">
           <div class="pos-stat-label">${pos.hasNewTrades && hasInitial ? 'Invertido <span class="stat-note">(excl. saldo ini.)</span>' : 'Invertido'}</div>
-          <div class="pos-stat-val">${pos.hasNewTrades ? formatUsd(pos.pnlInvested) + ' USD' : formatUsd(pos.totalUsdInvested) + ' USD'}</div>
+          <div class="pos-stat-val">${formatMoneyLabeled(pos.hasNewTrades ? pos.pnlInvested : pos.totalUsdInvested)}</div>
         </div>
         <div class="pos-stat">
           <div class="pos-stat-label">${pos.hasNewTrades ? 'Valor actual' : 'Valor actual (total)'}</div>
-          <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatUsd(pos.hasNewTrades ? pos.pnlCurrVal : pos.currentValue) + ' USD' : '—'}</div>
+          <div class="pos-stat-val ${pnlCls}">${pos.hasPrice ? formatMoneyLabeled(pos.hasNewTrades ? pos.pnlCurrVal : pos.currentValue) : '—'}</div>
         </div>
+        ${pos.hasSales ? `
+        <div class="pos-stat">
+          <div class="pos-stat-label">Resultado realizado</div>
+          <div class="pos-stat-val ${realCls}">${realSign}${formatMoneyLabeled(pos.realizedPnl)}</div>
+        </div>` : ''}
       </div>
 
       <div class="pnl-bar-track">
@@ -1013,11 +1059,15 @@ function renderPortfolioOverview(pf) {
   const pnlSign = pf.totalPnlUsd >= 0 ? '+' : '';
   const pnlCls  = pf.totalPnlUsd >= 0 ? 'green' : 'red';
   const pnlAccent = pf.totalPnlUsd >= 0 ? 'metric-buy' : 'metric-sell';
+  const hasSales  = pf.positions.some(p => p.hasSales);
+  const isArs     = getPfCurrency() === 'ars';
+  const realSign  = pf.totalRealizedPnl >= 0 ? '+' : '';
+  const realCls   = pf.totalRealizedPnl >= 0 ? 'green' : 'red';
 
   // Per-type breakdown rows (only show types that have positions)
   const typeOrder = ['crypto', 'stock', 'bond'];
   const breakdownRows = typeOrder
-    .filter(t => pf.byType[t])
+    .filter(t => pf.byType[t]?.totalHeld > 0) // skip categories with only closed positions
     .map(t => {
       const d    = pf.byType[t];
       const meta = TYPE_META[t] || { label: t, icon: 'ti-circle' };
@@ -1030,15 +1080,15 @@ function renderPortfolioOverview(pf) {
       const sign    = pnl >= 0 ? '+' : '';
       const cls     = pnl >= 0 ? 'green' : 'red';
       const pnlStr  = hasNew
-        ? `<span class="pf-type-pnl ${cls}">${sign}${formatUsd(pnl)} (${sign}${pnlPct.toFixed(1)}%)</span>`
+        ? `<span class="pf-type-pnl ${cls}">${sign}${formatMoney(pnl)} (${sign}${pnlPct.toFixed(1)}%)</span>`
         : `<span class="pf-type-pnl muted">solo saldo inicial</span>`;
       return `
         <div class="pf-type-row">
           <span class="pf-type-icon"><i class="ti ${meta.icon}" aria-hidden="true"></i></span>
           <span class="pf-type-name">${meta.label}</span>
-          <span class="pf-type-invested">${formatUsd(displayInvested)}</span>
+          <span class="pf-type-invested">${formatMoney(displayInvested)}</span>
           <span class="pf-type-arrow"><i class="ti ti-arrow-right" aria-hidden="true"></i></span>
-          <span class="pf-type-value">${formatUsd(displayValue)}</span>
+          <span class="pf-type-value">${formatMoney(displayValue)}</span>
           ${pnlStr}
         </div>`;
     }).join('');
@@ -1047,23 +1097,38 @@ function renderPortfolioOverview(pf) {
     <div class="pf-overview">
       <div class="pf-overview-title">
         <i class="ti ti-wallet" aria-hidden="true"></i> Resumen de inversiones
+        ${arsRates?.mep ? `
+        <div class="pf-ccy-toggle" role="group" aria-label="Moneda">
+          <button class="equity-range-btn${isArs ? '' : ' active'}" onclick="setPfCurrency('usd')">USD</button>
+          <button class="equity-range-btn${isArs ? ' active' : ''}" onclick="setPfCurrency('ars')">ARS</button>
+        </div>` : ''}
       </div>
+      ${isArs ? `<div class="pf-ccy-note">
+        <i class="ti ti-info-circle" aria-hidden="true"></i>
+        Valores en pesos al dólar MEP de hoy ($${Math.round(arsRates.mep).toLocaleString('es-AR')}). Los resultados se calculan en dólares.
+      </div>` : ''}
       <div class="portfolio-summary pf-totals">
         <div class="metric">
           <div class="metric-label">Total invertido</div>
-          <div class="metric-val">${formatUsd(pf.totalUsdInvested)}</div>
-          <div class="metric-sub muted">USD acumulados</div>
+          <div class="metric-val">${formatMoney(pf.totalUsdInvested)}</div>
+          <div class="metric-sub muted">${isArs ? 'costo, al MEP de hoy' : hasSales ? 'USD en cartera' : 'USD acumulados'}</div>
         </div>
         <div class="metric">
           <div class="metric-label">Valor actual</div>
-          <div class="metric-val">${formatUsd(pf.totalCurrentValue)}</div>
+          <div class="metric-val">${formatMoney(pf.totalCurrentValue)}</div>
           <div class="metric-sub muted">al precio de hoy</div>
         </div>
         <div class="metric ${pnlAccent}">
-          <div class="metric-label">Resultado neto</div>
-          <div class="metric-val ${pnlCls}">${pnlSign}${formatUsd(pf.totalPnlUsd)}</div>
+          <div class="metric-label">${hasSales ? 'Resultado no realizado' : 'Resultado neto'}</div>
+          <div class="metric-val ${pnlCls}">${pnlSign}${formatMoney(pf.totalPnlUsd)}</div>
           <div class="metric-sub ${pnlCls}">${pnlSign}${pf.totalPnlPct.toFixed(2)}%</div>
         </div>
+        ${hasSales ? `
+        <div class="metric">
+          <div class="metric-label">Resultado realizado</div>
+          <div class="metric-val ${realCls}">${realSign}${formatMoney(pf.totalRealizedPnl)}</div>
+          <div class="metric-sub muted">por ventas</div>
+        </div>` : ''}
       </div>
       ${breakdownRows ? `
         <div class="pf-divider"></div>
@@ -1254,7 +1319,7 @@ function renderPortfolio(priceData) {
     ${summaryHTML}
     ${equityHTML}
     ${positionsHTML}
-    <div class="section-title" style="margin-top:1.5rem">Registrar nueva compra</div>
+    <div class="section-title" style="margin-top:1.5rem">Registrar compra o venta</div>
     ${renderAddTradeFormHTML()}
     <div class="section-title" style="margin-top:1.5rem">Registrar saldo inicial</div>
     ${renderAddInitialBalanceFormHTML()}

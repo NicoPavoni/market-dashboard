@@ -44,17 +44,36 @@ function updateTrade(id, updates) {
   return trades;
 }
 
+/** Units of an asset held right now (after sales). */
+function heldQuantity(assetId) {
+  return computePortfolio({}).positions.find(p => p.assetId === assetId)?.totalQuantity ?? 0;
+}
+
+/**
+ * Positions use the average-cost method. Trades are replayed in date order:
+ * a sale removes the same fraction of quantity and cost basis, and its
+ * realized P&L is the USD received minus the cost removed. As with the
+ * unrealized P&L, initial balances are left out (their "cost" is just the
+ * value they had when registered).
+ * For sales (side: 'sell'), `usdInvested` holds the USD received.
+ */
 function computePortfolio(priceData) {
   const trades = loadTrades();
 
   const positions = {};
   let totalUsdInvested  = 0;
   let totalCurrentValue = 0;
+  let totalRealizedPnl  = 0;
   // P&L totals exclude initial-balance entries
   let totalPnlInvested  = 0;
   let totalPnlCurrVal   = 0;
 
-  trades.forEach(t => {
+  const byDate = trades
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => (a.t.date || '').localeCompare(b.t.date || '') || a.i - b.i)
+    .map(x => x.t);
+
+  byDate.forEach(t => {
     if (!positions[t.assetId]) {
       positions[t.assetId] = {
         assetId:          t.assetId,
@@ -62,19 +81,33 @@ function computePortfolio(priceData) {
         assetName:        t.assetName,
         assetType:        t.assetType,
         trades:           [],
-        totalUsdInvested: 0,
+        totalUsdInvested: 0,  // cost basis of the units still held
         totalArsInvested: 0,
         totalQuantity:    0,
         pnlInvested:      0,  // non-initial trades only
         pnlQuantity:      0,  // non-initial trades only
+        realizedPnl:      0,
+        hasSales:         false,
       };
     }
     const pos = positions[t.assetId];
     pos.trades.push(t);
+
+    if (t.side === 'sell') {
+      const f = pos.totalQuantity > 0 ? Math.min(1, t.quantity / pos.totalQuantity) : 0;
+      pos.realizedPnl      += (pos.pnlQuantity * t.priceUsd - pos.pnlInvested) * f;
+      pos.totalUsdInvested *= 1 - f;
+      pos.totalArsInvested *= 1 - f;
+      pos.totalQuantity    *= 1 - f;
+      pos.pnlInvested      *= 1 - f;
+      pos.pnlQuantity      *= 1 - f;
+      pos.hasSales          = true;
+      return;
+    }
+
     pos.totalUsdInvested += t.usdInvested;
     pos.totalArsInvested += t.arsAmount;
     pos.totalQuantity    += t.quantity;
-    totalUsdInvested     += t.usdInvested;
     if (!t.isInitial) {
       pos.pnlInvested += t.usdInvested;
       pos.pnlQuantity += t.quantity;
@@ -101,7 +134,10 @@ function computePortfolio(priceData) {
     pos.avgBuyPrice   = avgBuyPrice;
     pos.hasPrice      = currentPrice > 0;
     pos.hasNewTrades  = pos.pnlInvested > 0;
+    pos.isClosed      = pos.totalQuantity <= 1e-9;
 
+    totalUsdInvested  += pos.totalUsdInvested;
+    totalRealizedPnl  += pos.realizedPnl;
     totalCurrentValue += currentValue;
     totalPnlInvested  += pos.pnlInvested;
     totalPnlCurrVal   += pnlCurrVal;
@@ -125,9 +161,12 @@ function computePortfolio(priceData) {
 
   return {
     trades,
-    positions: Object.values(positions).sort((a, b) => b.totalUsdInvested - a.totalUsdInvested),
+    // Open positions first, largest first; fully sold ones at the end
+    positions: Object.values(positions).sort((a, b) =>
+      a.isClosed - b.isClosed || b.totalUsdInvested - a.totalUsdInvested),
     totalUsdInvested,
     totalCurrentValue,
+    totalRealizedPnl,
     totalPnlUsd,
     totalPnlPct,
     byType,

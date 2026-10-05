@@ -4,12 +4,19 @@
  * To add a new crypto: add an entry to KNOWN_ASSETS with type: 'crypto'
  *   and set `id` to the CoinGecko coin id (e.g. 'bitcoin', 'solana').
  *
- * To add a stock: add an entry with type: 'stock'. Real prices are fetched
- *   from Yahoo Finance using `asset.ticker` (e.g. 'AAPL', 'SPY').
- *   Falls back to simulated prices if the API is unavailable.
+ * Stock / bond prices come from data912.com (free, no API key, CORS enabled).
+ * All prices are in USD; simulated prices are only used if the API fails.
  *
- * To add a bond trading on BYMA: add type: 'bond' and set
- *   `yahooTicker` to the ticker with the .BA suffix (e.g. 'YM34O.BA').
+ * To add a US stock/ETF: add an entry with type: 'stock'. Prices are fetched
+ *   using `asset.ticker` (e.g. 'AAPL', 'SPY').
+ *
+ * To add a CEDEAR: add type: 'stock', market: 'cedear', `liveSymbol` set to
+ *   the USD (MEP) ticker on BYMA — usually the ticker + 'D' (e.g. 'VISTD') —
+ *   and `usTicker` set to the underlying US ticker (used for price history).
+ *
+ * To add an ON (corporate bond) on BYMA: add type: 'bond', market: 'corp' and
+ *   `liveSymbol` set to the USD (MEP) ticker, price per 100 VN (e.g. 'YM34D').
+ *   data912 has no history for ONs, so only the live price is shown.
  */
 
 // Default watchlist loaded on first visit
@@ -51,7 +58,7 @@ const KNOWN_ASSETS = {
   'litecoin':   { id: 'litecoin',          ticker: 'LTC',  name: 'Litecoin',      type: 'crypto' },
   'pepe':       { id: 'pepe',              ticker: 'PEPE', name: 'Pepe',          type: 'crypto' },
 
-  // ── Stocks (simulated prices — see README for real data) ──
+  // ── Stocks ───────────────────────────────────────────────
   'aapl':       { id: 'apple',             ticker: 'AAPL', name: 'Apple',         type: 'stock' },
   'apple':      { id: 'apple',             ticker: 'AAPL', name: 'Apple',         type: 'stock' },
   'nvda':       { id: 'nvidia-corporation',ticker: 'NVDA', name: 'NVIDIA',        type: 'stock' },
@@ -93,14 +100,19 @@ const KNOWN_ASSETS = {
   'loma':       { id: 'loma-negra',       ticker: 'LOMA', name: 'Loma Negra',     type: 'stock' },
   'pamp':       { id: 'pampa-energia',    ticker: 'PAM',  name: 'Pampa Energía',  type: 'stock' },
 
+  // ── CEDEARs (BYMA, cotización en USD MEP) ─────────────────────────────
+  'vist':       { id: 'vista-cedear', ticker: 'VIST', name: 'Vista Energy (CEDEAR)', type: 'stock', market: 'cedear', liveSymbol: 'VISTD', usTicker: 'VIST' },
+  'vista':      { id: 'vista-cedear', ticker: 'VIST', name: 'Vista Energy (CEDEAR)', type: 'stock', market: 'cedear', liveSymbol: 'VISTD', usTicker: 'VIST' },
+  'vistd':      { id: 'vista-cedear', ticker: 'VIST', name: 'Vista Energy (CEDEAR)', type: 'stock', market: 'cedear', liveSymbol: 'VISTD', usTicker: 'VIST' },
+
   // ── Obligaciones Negociables (Bonos BYMA) ────────────────────────────
-  // yahooTicker uses the .BA suffix for Buenos Aires exchange
-  'ym34o':      { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', yahooTicker: 'YM34O.BA'  },
-  'ypf-on':     { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', yahooTicker: 'YM34O.BA'  },
-  'ymcho':      { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', yahooTicker: 'YM34O.BA'  },
-  'tlcto':      { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', yahooTicker: 'TLCTO.BA'  },
-  'telecom-on': { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', yahooTicker: 'TLCTO.BA'  },
-  'tlcmo':      { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', yahooTicker: 'TLCTO.BA'  },
+  // liveSymbol is the USD (MEP) ticker on BYMA, priced per 100 VN
+  'ym34o':      { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', market: 'corp', liveSymbol: 'YM34D' },
+  'ypf-on':     { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', market: 'corp', liveSymbol: 'YM34D' },
+  'ymcho':      { id: 'ym34o',  ticker: 'YM34O',  name: 'YPF ON 2034 (YM34O)',    type: 'bond', market: 'corp', liveSymbol: 'YM34D' },
+  'tlcto':      { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', market: 'corp', liveSymbol: 'TLCTD' },
+  'telecom-on': { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', market: 'corp', liveSymbol: 'TLCTD' },
+  'tlcmo':      { id: 'tlcto',  ticker: 'TLCTO',  name: 'Telecom ON USD (TLCTO)', type: 'bond', market: 'corp', liveSymbol: 'TLCTD' },
 };
 
 // Simulated base prices for stocks (used when real API not available)
@@ -128,6 +140,51 @@ const STOCK_BASE_PRICES = {
   'despegar':           11,
   'loma-negra':         10,
   'pampa-energia':      55,
+  'vista-cedear':       23,
   'ym34o':             100,
   'tlcto':             100,
 };
+
+// ─── Assets found with the search box (data912) ──────────────────────────────
+// Their id encodes where the price comes from — 'dyn~<market>~<ticker>~<liveSymbol>' —
+// so the asset can be rebuilt from the id saved in the watchlist / trades.
+
+const MARKET_INFO = {
+  us:        { type: 'stock', label: 'Acción EE.UU.' },
+  cedear:    { type: 'stock', label: 'CEDEAR' },
+  arg_stock: { type: 'stock', label: 'Acción ARG' },
+  arg_bond:  { type: 'bond',  label: 'Bono' },
+  corp:      { type: 'bond',  label: 'ON' },
+};
+
+function makeDynamicAsset(market, ticker, liveSymbol) {
+  const info = MARKET_INFO[market];
+  return {
+    id:   `dyn~${market}~${ticker}~${liveSymbol}`,
+    ticker,
+    name: `${ticker} (${info.label})`,
+    type: info.type,
+    market,
+    liveSymbol,
+    // ARS-quoted instruments are converted to USD with the MEP rate
+    ars:  market === 'arg_stock'
+       || ((market === 'cedear' || market === 'arg_bond') && liveSymbol === ticker),
+    ...(market === 'cedear' && { usTicker: ticker }),
+  };
+}
+
+/**
+ * Find an asset by id. Search-box assets are rebuilt from their id and
+ * registered in KNOWN_ASSETS, so the rest of the app can see them.
+ */
+function findAsset(id) {
+  const known = Object.values(KNOWN_ASSETS).find(a => a.id === id);
+  if (known || !id?.startsWith('dyn~')) return known;
+
+  const [, market, ticker, liveSymbol] = id.split('~');
+  if (!MARKET_INFO[market] || !ticker || !liveSymbol) return undefined;
+
+  const asset = makeDynamicAsset(market, ticker, liveSymbol);
+  KNOWN_ASSETS[asset.id.toLowerCase()] = asset;
+  return asset;
+}

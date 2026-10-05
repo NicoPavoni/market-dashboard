@@ -4,8 +4,10 @@ Dashboard personal para seguimiento de acciones y criptomonedas con análisis t�
 
 ## ✨ Funcionalidades
 
-- **Watchlist personalizable** — agregá y eliminá activos libremente
-- **Precios en tiempo real** — criptos vía CoinGecko (gratis, sin API key)
+- **Watchlist personalizable** — buscador con todos los instrumentos de BYMA (acciones, CEDEARs, bonos, ONs) y de EE.UU.
+- **Precios en tiempo real** — criptos vía CoinGecko, acciones y bonos vía data912 (gratis, sin API key)
+- **Portafolio** — compras, ventas (precio promedio ponderado, resultado realizado y no realizado) y saldos iniciales
+- **Vista en USD o en pesos** al dólar MEP del día
 - **Análisis técnico automático:**
   - RSI (Relative Strength Index) de 14 períodos
   - Medias móviles MA20 y MA50
@@ -54,7 +56,8 @@ market-dashboard/
 └── src/
     ├── styles.css      # Estilos (light + dark mode)
     ├── data.js         # Catálogo de activos y watchlist inicial
-    ├── analysis.js     # Indicadores técnicos (RSI, MA, señales)
+    ├── analysis.js     # Precios (CoinGecko, data912) e indicadores técnicos
+    ├── search.js       # Buscador de activos
     ├── ui.js           # Funciones de renderizado DOM
     └── app.js          # Controlador principal y estado
 ```
@@ -64,10 +67,8 @@ market-dashboard/
 ### Criptomonedas (precios reales vía CoinGecko)
 BTC, ETH, SOL, BNB, ADA, XRP, DOGE, AVAX, LINK, DOT, MATIC, UNI, ATOM, LTC, PEPE
 
-### Acciones (precios simulados*)
-AAPL, NVDA, MSFT, TSLA, AMZN, GOOGL, META, NFLX, DIS, KO, JPM, V
-
-*Para precios reales de acciones, ver sección **Agregar datos reales de acciones** más abajo.
+### Acciones, CEDEARs, bonos y ONs (precios reales vía data912)
+Cualquier instrumento de BYMA o de NYSE/NASDAQ: buscalo por ticker en **Configurar → Agregar activo** (ej: GGAL, AL30, YM34O, VIST, KO).
 
 ## ⚙️ Personalización
 
@@ -103,19 +104,17 @@ En `src/data.js`, agregá a `KNOWN_ASSETS`:
 El `id` debe coincidir con el ID que usa CoinGecko. Podés verificarlo en:
 `https://api.coingecko.com/api/v3/coins/list`
 
-## 📈 Agregar datos reales de acciones
+## 📈 Precios de acciones, CEDEARs y bonos
 
-Las APIs gratuitas más populares para acciones son:
+Los precios vienen de [data912.com](https://data912.com) (gratis, sin API key, permite llamadas desde el navegador). Todo se muestra en **USD**:
 
-| Proveedor | Plan gratuito | Link |
-|-----------|--------------|------|
-| **Alpha Vantage** | 25 req/día | [alphavantage.co](https://www.alphavantage.co) |
-| **Yahoo Finance** (no oficial) | Ilimitado* | via `query1.finance.yahoo.com` |
-| **Polygon.io** | 5 req/min | [polygon.io](https://polygon.io) |
-| **Finnhub** | 60 req/min | [finnhub.io](https://finnhub.io) |
+| Tipo | Precio en vivo | Historial (RSI / medias) |
+|------|----------------|--------------------------|
+| Acciones / ADRs de EE.UU. | `live/usa_stocks`, `live/usa_adrs` | `historical/usa_stocks/{ticker}` |
+| CEDEARs | `live/arg_cedears`, ticker en USD MEP (ej. `VISTD`) | el de la acción subyacente, reescalado al precio del CEDEAR |
+| ONs | `live/arg_corp`, ticker en USD MEP (ej. `YM34D`), por 100 VN | no disponible: se muestra con el badge "sin hist." |
 
-Para integrar, reemplazá la función `simulateStockPrices` en `src/analysis.js`
-con un fetch real al proveedor elegido.
+Si la API falla, se usa un precio simulado y el activo muestra el badge "sim". Para agregar activos, ver el comentario al principio de `src/data.js`.
 
 ## 🔔 Alertas en el teléfono (futuro)
 

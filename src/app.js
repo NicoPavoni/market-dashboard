@@ -60,6 +60,7 @@ async function loadAll() {
     Promise.all(watchlist.map(a => loadSingleAsset(a))),
     loadFundamentals(),
     loadMacro(),
+    loadArsRates(),
   ]);
   computeCompositeScores();
   setStatus('Datos actualizados — próxima actualización automática en 30 min');
@@ -139,6 +140,7 @@ function selectAsset(id) {
   renderAssetList(watchlist, priceData);
 }
 
+// "+ Agregar" button: exact catalog key first (btc, aapl…), else best search match
 async function addAsset() {
   const input = document.getElementById('new-ticker');
   const msgEl = document.getElementById('add-msg');
@@ -146,12 +148,21 @@ async function addAsset() {
 
   if (!val) return;
 
-  const asset = KNOWN_ASSETS[val];
+  const asset = KNOWN_ASSETS[val]
+    || (await searchAssets(val)).find(a => !watchlist.some(w => w.id === a.id));
   if (!asset) {
-    msgEl.textContent = '⚠ Activo no reconocido. Prueba: BTC, ETH, SOL, AAPL, NVDA, TSLA, MSFT…';
+    msgEl.textContent = '⚠ Activo no encontrado. Probá con el ticker: BTC, AAPL, GGAL, AL30, YM34O…';
     msgEl.style.color = '#E24B4A';
     return;
   }
+  if (asset.id.startsWith('dyn~')) findAsset(asset.id); // register it in KNOWN_ASSETS
+  await addAssetToWatchlist(asset);
+}
+
+async function addAssetToWatchlist(asset) {
+  const input = document.getElementById('new-ticker');
+  const msgEl = document.getElementById('add-msg');
+
   if (watchlist.find(x => x.id === asset.id)) {
     msgEl.textContent = 'Este activo ya está en tu watchlist.';
     msgEl.style.color = '#BA7517';
@@ -209,6 +220,60 @@ function setTradeMode(mode) {
   if (hint) hint.textContent = isUsd ? 'recomendado — ayuda a calcular el precio unitario' : 'opcional en modo ARS';
 }
 
+// ─── Trade side (buy / sell) ────────────────────────────────────────
+
+function getTradeSide() {
+  return document.querySelector('.trade-side-btn.active')?.dataset.side || 'buy';
+}
+
+function setTradeSide(side) {
+  document.querySelectorAll('.trade-side-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.side === side);
+  });
+  const sell = side === 'sell';
+  const set  = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set('trade-date-label',  sell ? 'Fecha de venta' : 'Fecha de compra');
+  set('trade-ars-label',   sell ? 'Monto recibido en pesos ARS $' : 'Monto en pesos ARS $');
+  set('trade-price-label', sell ? 'Precio de venta (USD)' : 'Precio de compra (USD)');
+  set('trade-usd-label',   sell ? 'Total recibido (USD)' : 'Total invertido (USD)');
+  set('trade-usd-hint',    sell ? 'lo que cobraste por la venta' : 'costo base de tu posición');
+
+  const btn = document.getElementById('trade-submit');
+  if (btn) btn.innerHTML = sell
+    ? '<i class="ti ti-arrow-up-right" aria-hidden="true"></i> Registrar venta'
+    : '<i class="ti ti-plus" aria-hidden="true"></i> Registrar compra';
+
+  updateTradeHeld();
+  updateTradeCalc();
+  updateTradeCalcUsd();
+}
+
+// In sell mode, shows how many units are held, with a shortcut to sell them all
+function updateTradeHeld() {
+  const el      = document.getElementById('trade-held');
+  const assetId = document.getElementById('trade-asset')?.value;
+  if (!el) return;
+  if (getTradeSide() !== 'sell' || !assetId) {
+    el.classList.add('hidden');
+    return;
+  }
+  const held   = heldQuantity(assetId);
+  const ticker = findAsset(assetId)?.ticker ?? '';
+  el.innerHTML = held > 0
+    ? `Tenés ${held.toFixed(6)} ${ticker} · <button type="button" class="link-btn" onclick="sellAllHeld()">vender todo</button>`
+    : `No tenés ${ticker} en cartera.`;
+  el.classList.remove('hidden');
+}
+
+function sellAllHeld() {
+  const assetId = document.getElementById('trade-asset')?.value;
+  const qtyEl   = document.getElementById('trade-qty');
+  if (!assetId || !qtyEl) return;
+  qtyEl.value = heldQuantity(assetId).toFixed(6);
+  if (getTradeMode() === 'usd') updateTradeCalcUsd();
+  else updateTradeFromQty();
+}
+
 function getTradeMode() {
   return document.querySelector('.trade-mode-btn.active')?.dataset.mode || 'ars';
 }
@@ -221,6 +286,7 @@ function updateTradePriceField() {
     const priceEl = document.getElementById('trade-price');
     if (priceEl) priceEl.value = d.current.toFixed(2);
   }
+  updateTradeHeld();
   updateTradeCalc();
   updateTradeCalcUsd();
 }
@@ -253,7 +319,8 @@ function updateTradeCalc() {
     return;
   }
 
-  const asset       = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  const asset       = findAsset(assetId);
+  const sell        = getTradeSide() === 'sell';
   const usdInvested = ars / rate;
   const quantity    = usdInvested / price;
 
@@ -265,11 +332,11 @@ function updateTradeCalc() {
 
   calcEl.innerHTML = `
     <span class="calc-item">
-      <strong>USD invertidos:</strong> ${formatUsd(usdInvested)}
+      <strong>USD ${sell ? 'recibidos' : 'invertidos'}:</strong> ${formatUsd(usdInvested)}
     </span>
     <span class="calc-sep">·</span>
     <span class="calc-item">
-      <strong>${asset?.ticker ?? '?'} comprados:</strong> ${quantity.toFixed(6)}
+      <strong>${asset?.ticker ?? '?'} ${sell ? 'vendidos' : 'comprados'}:</strong> ${quantity.toFixed(6)}
     </span>
   `;
 }
@@ -288,8 +355,9 @@ function updateTradeCalcUsd() {
     return;
   }
 
-  const asset     = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  const asset     = findAsset(assetId);
   const ticker    = asset?.ticker ?? '?';
+  const sell      = getTradeSide() === 'sell';
   const priceUnit = qty > 0 ? usd / qty : (priceData[assetId]?.current || 0);
   const qtyCalc   = qty > 0 ? qty : (priceUnit > 0 ? usd / priceUnit : 0);
 
@@ -305,11 +373,11 @@ function updateTradeCalcUsd() {
 
   calcEl.innerHTML = `
     <span class="calc-item">
-      <strong>USD invertidos:</strong> ${formatUsd(usd)}
+      <strong>USD ${sell ? 'recibidos' : 'invertidos'}:</strong> ${formatUsd(usd)}
     </span>
     <span class="calc-sep">·</span>
     <span class="calc-item">
-      <strong>${ticker} registrados:</strong> ${qtyCalc.toFixed(6)}${priceLabel}
+      <strong>${ticker} ${sell ? 'vendidos' : 'registrados'}:</strong> ${qtyCalc.toFixed(6)}${priceLabel}
     </span>
   `;
 }
@@ -327,7 +395,7 @@ async function submitTrade() {
     return;
   }
 
-  const asset = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  const asset = findAsset(assetId);
   if (!asset) {
     msgEl.textContent = '⚠ Activo no reconocido.';
     msgEl.style.color = '#E24B4A';
@@ -392,6 +460,21 @@ async function submitTrade() {
     quantity    = usdInvested / priceVal;
   }
 
+  const sell = getTradeSide() === 'sell';
+  if (sell) {
+    const held = heldQuantity(asset.id);
+    if (quantity > held * (1 + 1e-6)) {
+      msgEl.textContent = `⚠ Querés vender ${quantity.toFixed(6)} ${asset.ticker}, pero tenés ${held.toFixed(6)}.`;
+      msgEl.style.color = '#E24B4A';
+      return;
+    }
+    // Selling (almost) everything closes the position — avoid leftover dust
+    if (quantity > held * 0.9999) {
+      quantity    = held;
+      usdInvested = quantity * priceUsd;
+    }
+  }
+
   addTrade({
     assetId:    asset.id,
     ticker:     asset.ticker,
@@ -403,9 +486,10 @@ async function submitTrade() {
     usdInvested,
     priceUsd,
     quantity,
+    ...(sell && { side: 'sell' }),
   });
 
-  if (!watchlist.find(w => w.id === asset.id)) {
+  if (!sell && !watchlist.find(w => w.id === asset.id)) {
     watchlist.push({ ...asset });
     saveWatchlist();
     await loadSingleAsset(asset);
@@ -421,13 +505,13 @@ async function submitTrade() {
 }
 
 function deleteTrade(id) {
-  if (!confirm('¿Eliminar esta compra?')) return;
+  if (!confirm('¿Eliminar esta operación?')) return;
   removeTrade(id);
   renderPortfolio(priceData);
 }
 
 async function addAssetToWatchlistFromPortfolio(assetId) {
-  const asset = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  const asset = findAsset(assetId);
   if (!asset || watchlist.find(w => w.id === assetId)) return;
   watchlist.push({ ...asset });
   saveWatchlist();
@@ -453,7 +537,7 @@ function _authMsg(id, text, isError) {
 async function doAuthLogin() {
   const inp = document.getElementById('auth-pw');
   const r   = await authLogin(inp?.value ?? '');
-  if (r.ok) { location.reload(); return; }
+  if (r.ok) { await startApp(); return; }
   _authMsg('auth-login-msg', r.msg, true);
   if (inp) {
     inp.value = '';
@@ -536,12 +620,6 @@ function cancelTradeEdit() {
   renderPortfolio(priceData);
 }
 
-// ─── Keyboard shortcut ────────────────────────────────────────────────
-
-document.getElementById('new-ticker').addEventListener('keydown', e => {
-  if (e.key === 'Enter') addAsset();
-});
-
 // ─── Initial balances (first-run seeding) ────────────────────────────
 
 const SEED_KEY = 'mktdash_seed_v1';
@@ -609,7 +687,7 @@ async function addInitialBalance() {
     return;
   }
 
-  const asset = Object.values(KNOWN_ASSETS).find(a => a.id === assetId);
+  const asset = findAsset(assetId);
   if (!asset) return;
 
   if (!watchlist.find(w => w.id === assetId)) {
@@ -653,22 +731,45 @@ async function syncWatchlistFromCloud() {
   const ids = await dbLoadWatchlist();
   if (!ids || !ids.length) return;
   watchlist = ids
-    .map(id => Object.values(KNOWN_ASSETS).find(a => a.id === id))
+    .map(id => findAsset(id))
     .filter(Boolean)
     .map(a => ({ ...a }));
 }
 
 // ─── ARS/USD exchange rate (bluelytics) ──────────────────────────────
 
-async function loadArsRates() {
+async function fetchBlueRate() {
   try {
     const r = await fetch('https://api.bluelytics.com.ar/v2/latest');
-    if (!r.ok) return;
+    if (!r.ok) return null;
     const data = await r.json();
-    arsRates = { blue: data.blue?.value_sell ?? null };
+    return data.blue?.value_sell ?? null;
   } catch (e) {
-    console.warn('[ars] rate fetch failed:', e.message);
+    console.warn('[ars] blue rate fetch failed:', e.message);
+    return null;
   }
+}
+
+async function loadArsRates() {
+  const [blue, mep] = await Promise.all([fetchBlueRate(), fetchMepRate()]);
+  arsRates = { blue, mep };
+}
+
+// ─── Portfolio display currency (USD / ARS at today's MEP) ──────────
+
+const PF_CCY_KEY = 'mktdash_pfccy_v1';
+
+function getPfCurrency() {
+  try {
+    return localStorage.getItem(PF_CCY_KEY) === 'ars' && arsRates?.mep ? 'ars' : 'usd';
+  } catch {
+    return 'usd';
+  }
+}
+
+function setPfCurrency(ccy) {
+  try { localStorage.setItem(PF_CCY_KEY, ccy); } catch {}
+  renderPortfolio(priceData);
 }
 
 // ─── Push notifications ───────────────────────────────────────────────
@@ -761,33 +862,26 @@ async function syncPortfolioAssets() {
   const missingIds = [...new Set(trades.map(t => t.assetId))]
     .filter(id => !watchlist.find(a => a.id === id));
   for (const id of missingIds) {
-    const asset = Object.values(KNOWN_ASSETS).find(a => a.id === id);
+    const asset = findAsset(id);
     if (asset) watchlist.push({ ...asset });
   }
 }
 
-(async () => {
-  // Wait for Firebase to determine auth state (resolves fast — uses cached credentials)
-  const user = await waitForAuth();
-
-  const appEl  = document.getElementById('app-container');
-  const authEl = document.getElementById('auth-screen');
-
-  if (!user) {
-    appEl.style.display  = 'none';
-    authEl.style.display = 'flex';
-    return;
-  }
-
-  appEl.style.display  = 'flex';
-  authEl.style.display = 'none';
+// Runs once the user has logged in (called from doAuthLogin)
+let appStarted = false;
+async function startApp() {
+  if (appStarted) return;
+  appStarted = true;
+  document.getElementById('auth-pw').value                = '';
+  document.getElementById('app-container').style.display = 'flex';
+  document.getElementById('auth-screen').style.display   = 'none';
 
   await syncWatchlistFromCloud();
   // Sync trades from cloud before seeding to prevent double-seeding on new devices
   const cloudSynced = await syncTradesFromCloud();
   seedInitialBalancesPreload();
   await syncPortfolioAssets();
-  await Promise.all([loadAll(), loadArsRates()]);
+  await loadAll();
   await seedInitialBalances();
   await syncPfHistoryFromCloud();
 
@@ -806,4 +900,11 @@ async function syncPortfolioAssets() {
     const ptab = document.getElementById('tab-portafolio');
     if (ptab && ptab.style.display !== 'none') renderPortfolio(priceData);
   }
+}
+
+(async () => {
+  // Always start at the login screen — the session is not remembered
+  await clearSavedSession();
+  document.getElementById('app-container').style.display = 'none';
+  document.getElementById('auth-screen').style.display   = 'flex';
 })();

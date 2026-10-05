@@ -103,42 +103,177 @@ async function fetchCryptoPrices(coinId) {
   }
 }
 
-/**
- * Fetch real price history from Yahoo Finance (free, no API key).
- * Works for US stocks/ETFs (AAPL, SPY…) and BYMA bonds (YM34O.BA).
- * Returns { prices, timestamps, simulated: false } or null on failure.
- */
-async function fetchYahooPrices(ticker, days = 90) {
-  const period2 = Math.floor(Date.now() / 1000);
-  const period1 = period2 - days * 86400;
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=1d&events=history`;
+// ─── data912.com — stocks, CEDEARs & ONs (free, no API key, CORS enabled) ───
 
+const DATA912_URL  = 'https://data912.com';
+const LIVE_TTL_MS  = 60_000;
+const _livePanels  = {};
+
+/**
+ * Fetch a data912 live panel ('usa_stocks', 'usa_adrs', 'arg_cedears',
+ * 'arg_stocks', 'arg_bonds', 'arg_corp')
+ * as { SYMBOL: row }. Cached for 60 s so a refresh downloads each panel once.
+ */
+function fetchLivePanel(panel) {
+  const hit = _livePanels[panel];
+  if (hit && Date.now() - hit.t < LIVE_TTL_MS) return hit.promise;
+
+  const promise = fetch(`${DATA912_URL}/live/${panel}`)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then(rows => Object.fromEntries(rows.map(r => [r.symbol, r])))
+    .catch(err => {
+      console.warn(`data912 live/${panel} failed:`, err.message);
+      if (_livePanels[panel]?.promise === promise) delete _livePanels[panel];
+      return {};
+    });
+
+  _livePanels[panel] = { t: Date.now(), promise };
+  return promise;
+}
+
+/** Last traded price for `symbol` in a live panel → { price, pctChange } or null. */
+async function fetchLivePrice(panel, symbol) {
+  const row   = (await fetchLivePanel(panel))[symbol];
+  const price = row && (row.c || row.px_bid);
+  return price > 0 ? { price, pctChange: row.pct_change || 0 } : null;
+}
+
+/** Live price for a US ticker — regular stocks first, then ADRs (YPF, PAM…). */
+async function fetchUsLivePrice(ticker) {
+  return (await fetchLivePrice('usa_stocks', ticker))
+      ?? (await fetchLivePrice('usa_adrs', ticker));
+}
+
+/** MEP rate (ARS per USD) implied by AL30 / AL30D, falling back to GD30. */
+async function fetchMepRate() {
+  const bonds = await fetchLivePanel('arg_bonds');
+  for (const t of ['AL30', 'GD30']) {
+    const ars = bonds[t]?.c;
+    const usd = bonds[`${t}D`]?.c;
+    if (ars > 0 && usd > 0) return ars / usd;
+  }
+  return null;
+}
+
+/**
+ * Daily close history from data912 — `path` is e.g. 'usa_stocks/AAPL',
+ * 'stocks/GGAL' or 'bonds/AL30D'. Prices are in the instrument's currency.
+ * Returns { prices, timestamps } or null on failure.
+ */
+async function fetchHistory(path, days = 90) {
   try {
-    const res = await fetch(url, { cache: 'default' });
+    const res = await fetch(`${DATA912_URL}/historical/${path}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    const result = data?.chart?.result?.[0];
-    if (!result) throw new Error('No result');
+    // US endpoint: { dates, prices } — BYMA endpoints: [{ date, c }, …]
+    const rows = Array.isArray(data)        ? data.map(r => [r.date, r.c])
+               : Array.isArray(data.prices) ? data.dates.map((d, i) => [d, data.prices[i]])
+               : null;
+    if (!rows) throw new Error(data.detail || data.Error || 'Sin datos');
 
-    const rawTs     = result.timestamp               || [];
-    const rawClose  = result.indicators?.quote?.[0]?.close || [];
-
-    const valid = rawTs
-      .map((t, i) => ({ t: t * 1000, p: rawClose[i] }))
+    const valid = rows.slice(-days - 1)
+      // Noon local time so the date doesn't shift a day in UTC-3
+      .map(([d, p]) => ({ t: new Date(`${d}T12:00:00`).getTime(), p }))
       .filter(x => x.p != null && isFinite(x.p) && x.p > 0);
 
     if (valid.length < 5) throw new Error('Datos insuficientes');
 
-    return {
-      prices:     valid.map(x => x.p),
-      timestamps: valid.map(x => x.t),
-      simulated:  false,
-    };
+    return { prices: valid.map(x => x.p), timestamps: valid.map(x => x.t) };
   } catch (err) {
-    console.warn(`Yahoo Finance fetch failed for ${ticker}:`, err.message);
+    console.warn(`data912 history failed for ${path}:`, err.message);
     return null;
   }
+}
+
+/**
+ * Adds today's live price to a daily history: replaces today's close if it
+ * is already there, otherwise appends it (skipped when the market is closed
+ * and the live price is just the last close).
+ */
+function withLivePoint(hist, livePrice) {
+  if (!livePrice) return hist;
+  const prices     = [...hist.prices];
+  const timestamps = [...hist.timestamps];
+  const last       = prices.length - 1;
+
+  if (new Date(timestamps[last]).toDateString() === new Date().toDateString()) {
+    prices[last] = livePrice;
+  } else if (Math.abs(livePrice - prices[last]) / prices[last] > 1e-6) {
+    prices.push(livePrice);
+    timestamps.push(Date.now());
+  }
+  return { prices, timestamps };
+}
+
+/** Two-point series (yesterday's close → live) for assets without history. */
+function livePointOnly(live) {
+  const now = Date.now();
+  return {
+    prices:     [live.price / (1 + live.pctChange / 100), live.price],
+    timestamps: [now - 86_400_000, now],
+    noHistory:  true,
+  };
+}
+
+/**
+ * Where each market's prices come from:
+ *   live       → [panel, symbol] for the current price ('us' = stocks + ADRs)
+ *   hist       → history path (null when data912 has none, e.g. ONs)
+ *   histLive   → live price of the instrument the history belongs to, when it
+ *                is not the asset itself (a CEDEAR uses its US stock's history)
+ */
+function priceSources(asset) {
+  const t = asset.usTicker || asset.ticker;
+  switch (asset.market) {
+    case 'corp':      return { live: ['arg_corp',    asset.liveSymbol], hist: null };
+    case 'cedear':    return { live: ['arg_cedears', asset.liveSymbol], hist: `usa_stocks/${t}`, histLive: ['us', t] };
+    case 'arg_stock': return { live: ['arg_stocks',  asset.liveSymbol], hist: `stocks/${asset.liveSymbol}` };
+    case 'arg_bond':  return { live: ['arg_bonds',   asset.liveSymbol], hist: `bonds/${asset.liveSymbol}` };
+    default:          return { live: ['us', t], hist: `usa_stocks/${t}` };
+  }
+}
+
+function fetchSourcePrice([panel, symbol]) {
+  return panel === 'us' ? fetchUsLivePrice(symbol) : fetchLivePrice(panel, symbol);
+}
+
+/**
+ * Real prices for a stock / CEDEAR / bond / ON, always in USD.
+ * ARS-quoted instruments (asset.ars) are converted with the MEP rate.
+ * History is rescaled so its last point matches the live USD price
+ * (RSI and moving averages don't depend on the scale).
+ * Returns { prices, timestamps, simulated: false } or null on failure.
+ */
+async function fetchMarketPrices(asset) {
+  const src = priceSources(asset);
+  const [live, hist, histLive, mep] = await Promise.all([
+    fetchSourcePrice(src.live),
+    src.hist     ? fetchHistory(src.hist)         : null,
+    src.histLive ? fetchSourcePrice(src.histLive) : null,
+    asset.ars    ? fetchMepRate()                 : null,
+  ]);
+
+  const usdLive = !live      ? null
+                : !asset.ars ? live
+                : mep        ? { price: live.price / mep, pctChange: live.pctChange }
+                : null;
+
+  let series = null;
+  if (hist && usdLive) {
+    const h     = withLivePoint(hist, src.histLive ? histLive?.price : live.price);
+    const scale = usdLive.price / h.prices[h.prices.length - 1];
+    series = { prices: h.prices.map(p => p * scale), timestamps: h.timestamps };
+  } else if (usdLive) {
+    series = livePointOnly(usdLive);
+  } else if (hist && !src.histLive && !asset.ars) {
+    series = hist; // no live quote (e.g. SPY): last close is the current price
+  }
+
+  return series && { ...series, simulated: false };
 }
 
 /**
@@ -189,7 +324,7 @@ function getCompositeScore(rsi, ma20, ma50, change24h, rsiThreshold, fundamental
 
 /**
  * Load price data for a single asset.
- * Crypto → CoinGecko (real). Stock/Bond → Yahoo Finance (real, fallback sim).
+ * Crypto → CoinGecko (real). Stock/Bond → data912 (real, fallback sim).
  * Returns enriched object ready for rendering.
  */
 async function loadAssetData(asset, rsiThreshold = 35) {
@@ -198,9 +333,7 @@ async function loadAssetData(asset, rsiThreshold = 35) {
   if (asset.type === 'crypto') {
     raw = await fetchCryptoPrices(asset.id);
   } else if (asset.type === 'stock' || asset.type === 'bond') {
-    // yahooTicker overrides the default ticker (used for .BA suffix on BYMA bonds)
-    const yTicker = asset.yahooTicker || asset.ticker;
-    raw = await fetchYahooPrices(yTicker);
+    raw = await fetchMarketPrices(asset);
   }
 
   if (!raw) {

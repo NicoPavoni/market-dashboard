@@ -254,7 +254,12 @@
 
         <div class="section-title">Agregar activo a watchlist</div>
         <div class="add-bar">
-          <input class="add-input" id="new-ticker" placeholder="Ej: BTC, ETH, SPY, MELI, YPF, AAPL..." />
+          <div class="search-wrap">
+            <input class="add-input" id="new-ticker" autocomplete="off"
+              placeholder="Buscá por ticker: BTC, AAPL, GGAL, AL30, YM34O, VIST…"
+              oninput="onAssetSearchInput()" onkeydown="onAssetSearchKey(event)" />
+            <div class="search-results hidden" id="search-results"></div>
+          </div>
           <button class="btn-primary" onclick="addAsset()">+ Agregar</button>
         </div>
         <div id="add-msg" class="add-msg"></div>
@@ -334,6 +339,7 @@
   <script src="src/db.js"></script>
   <script src="src/data.js"></script>
   <script src="src/analysis.js"></script>
+  <script src="src/search.js"></script>
   <script src="src/fundamental.js"></script>
   <script src="src/macro.js"></script>
   <script src="src/risk.js"></script>

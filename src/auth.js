@@ -3,15 +3,20 @@
 // No one can bypass auth by inspecting client-side code.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Waits for Firebase to determine the initial auth state, then resolves.
-// Returns the Firebase User object if logged in, or null if not.
-function waitForAuth() {
-  return new Promise(resolve => {
-    const unsub = firebase.auth().onAuthStateChanged(user => {
+// The session is never remembered: every page load (including a reload)
+// requires the password. Also signs out any session saved by older
+// versions of the app, which used Firebase's default LOCAL persistence.
+async function clearSavedSession() {
+  const auth = firebase.auth();
+  await auth.setPersistence(firebase.auth.Auth.Persistence.NONE);
+  const user = await new Promise(resolve => {
+    const unsub = auth.onAuthStateChanged(u => {
       unsub();
-      resolve(user);
+      resolve(u);
     });
   });
+  // With NONE persistence, a user here can only come from a saved session
+  if (user) await auth.signOut();
 }
 
 async function authLogin(password) {
